@@ -15,6 +15,7 @@
  */
 
 import http from 'node:http';
+import crypto from 'node:crypto';
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -247,10 +248,44 @@ async function runAgent(input, emit) {
   emit({ type: 'done', mock: false });
 }
 
+// ── 登录与会话 ──────────────────────────────────────────────
+// 演示账号写在服务端，前端拿不到；令牌用 HMAC 签名，带 12 小时有效期。
+const SECRET = process.env.SESSION_SECRET || 'tongshi-demo-secret-change-me';
+const TTL = 12 * 3600 * 1000;
+
+const ACCOUNTS = {
+  100234: { password: 'tongshi', name: '宋定宜', unit: '派出所' },
+  100235: { password: 'tongshi', name: '刘丰硕', unit: '出入境管理部门' },
+  100236: { password: 'tongshi', name: '刘腾龙', unit: '巡特警' },
+};
+
+function issueToken(user) {
+  const payload = { ...user, exp: Date.now() + TTL };
+  const body = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const mac = crypto.createHmac('sha256', SECRET).update(body).digest('base64url');
+  return `${body}.${mac}`;
+}
+
+function verifyToken(token) {
+  if (!token) return null;
+  const [body, mac] = String(token).split('.');
+  if (!body || !mac) return null;
+  const expect = crypto.createHmac('sha256', SECRET).update(body).digest('base64url');
+  const a = Buffer.from(mac);
+  const b = Buffer.from(expect);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  try {
+    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
+    return payload.exp > Date.now() ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
 // ── HTTP ────────────────────────────────────────────────────
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
 
   if (req.method === 'OPTIONS') {
@@ -264,13 +299,45 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
+  let raw = '';
+  for await (const chunk of req) raw += chunk;
+
+  if (req.url === '/api/login' && req.method === 'POST') {
+    let badge = '';
+    let password = '';
+    try {
+      ({ badge = '', password = '' } = JSON.parse(raw));
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ message: '请求格式不对' }));
+      return;
+    }
+
+    const acc = ACCOUNTS[String(badge).trim()];
+    if (!acc || acc.password !== String(password)) {
+      res.writeHead(401, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ message: '警号或密码不正确' }));
+      return;
+    }
+
+    const user = { badge: String(badge).trim(), name: acc.name, unit: acc.unit };
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ token: issueToken(user), user }));
+    return;
+  }
+
   if (req.url !== '/api/analyse' || req.method !== 'POST') {
     res.writeHead(404).end('not found');
     return;
   }
 
-  let raw = '';
-  for await (const chunk of req) raw += chunk;
+  const auth = String(req.headers.authorization || '');
+  const payload = verifyToken(auth.startsWith('Bearer ') ? auth.slice(7) : '');
+  if (!payload) {
+    res.writeHead(401, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ message: '登录已失效，请重新登录' }));
+    return;
+  }
 
   let input = '';
   try {

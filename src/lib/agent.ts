@@ -18,12 +18,13 @@ export type AgentEvent =
 
 export async function runAgent(
   input: string,
+  token: string,
   onEvent: (e: AgentEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
   const res = await fetch('/api/analyse', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
     body: JSON.stringify({ input }),
     signal,
   });

@@ -158,13 +158,39 @@ npm run dev
 ## 目录
 
 ```
+server/
+  agent.mjs            Agent 循环 + 登录鉴权 + 元典检索
 src/
-  App.tsx              登录、工作台、结果卡
+  App.tsx              会话切换（登录 / 工作台）
+  components/
+    Login.tsx          登录页
+    Workbench.tsx      输入区与结果区
+    ResultCard.tsx     匹配结果卡（复制中/英文、打印）
+    AiFallback.tsx     未命中时的 Agent 研判
+    Empty.tsx          空状态：流程说明、情形清单、最近记录
   data/cases.ts        情形库 + 法条（★ 条号待核）
   lib/match.ts         匹配算法
-  lib/ai.ts            模型接入（流式）+ 提示词
-  styles.css           全部样式
+  lib/agent.ts         Agent 客户端（SSE）
+  lib/legal.ts         元典检索（浏览器直连兜底）
+  lib/ai.ts            模型直连（浏览器兜底）
+  lib/session.ts       登录态与令牌
+  lib/history.ts       最近处置记录
+  styles.css           全部样式（含打印样式）
 ```
+
+## 登录
+
+不是摆设。账号写在服务端（`server/agent.mjs`），前端只拿到 HMAC 签名的会话令牌，
+12 小时过期；`/api/analyse` 会校验令牌，没有令牌直接 401。
+
+演示账号：警号 `100234` / 密码 `tongshi`（另有 100235、100236 两个）。
+
+正式环境应换成内网统一认证，会话密钥走 `SESSION_SECRET` 环境变量。
+
+## 打印与导出
+
+结果卡上有“打印 / 存为 PDF”。用的是浏览器原生打印，配了一套打印样式：只输出结果卡，
+隐藏输入区、导航和按钮。在打印对话框里选“另存为 PDF”即可归档。
 
 ## 必须处理的两件事
 
