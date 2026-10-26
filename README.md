@@ -79,6 +79,43 @@ npm run build    # 产物在 dist/
 
 界面不用动，情形数量、分类列表、匹配全部自动跟上。
 
+## 架构：前端 + Agent 服务
+
+```
+浏览器 (React)  ──POST /api/analyse──▶  Node Agent (server/agent.mjs)
+                                          │
+                                          ├─▶ 元典 law_vector_search（检索现行法条）
+                                          └─▶ 大模型（DeepSeek / Claude / 通义，可切）
+```
+
+Agent 循环在服务端跑，前端只负责渲染。这样做有三个好处：key 不进 bundle；
+MCP 或第三方接口不受浏览器 CORS 限制；中间过程（检索了什么、命中几条）可以推回前端展示，
+评委看得见。
+
+跑起来需要两个进程，`start.bat` 会自动开：
+
+```bash
+npm run agent   # 8787，Agent 服务
+npm run dev     # 5180，前端（已配 /api 代理）
+```
+
+服务端读的是**不带 VITE_ 前缀**的变量（`.env.local`）：
+
+```
+LAW_API_KEY=...
+LLM_API_KEY=...
+LLM_BASE=https://api.deepseek.com
+LLM_MODEL=deepseek-chat
+```
+
+没配 key 也能跑：检索返回示例数据、回答走模板，界面会明确标注，链路本身是通的。
+
+### 为什么不用 Hermes / OpenClaw 当外壳
+
+这两个是本地 Agent 运行时，适合自己用；比赛要求作品是公网可访问的 Web 应用，套上去之后
+就没有「在线演示」了。同样的 Agent 逻辑用 90 行 Node 写在 `server/agent.mjs` 里，
+评委打开网址就能用，也更容易写进技术文档。
+
 ## 接法规检索（可选，但强烈建议）
 
 情形库没命中时，光靠模型容易编条款。接一层真实法规检索能解决这个问题：

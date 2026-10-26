@@ -19,6 +19,11 @@ if not exist "node_modules" (
   )
 )
 
-echo 启动中，浏览器会自动打开...
+echo 启动 Agent 服务（新窗口，日志在那里面看）...
+start "通事 Agent" cmd /k "node server\agent.mjs"
+
+timeout /t 1 >nul
+
+echo 启动前端，浏览器会自动打开...
 call npm run dev
 pause

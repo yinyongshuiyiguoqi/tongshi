@@ -5,6 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "agent": "node server/agent.mjs",
+    "start": "node server/agent.mjs",
     "build": "vite build",
     "preview": "vite preview",
     "typecheck": "tsc --noEmit"
