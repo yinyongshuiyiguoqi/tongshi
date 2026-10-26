@@ -1674,6 +1674,66 @@ textarea {
   color: var(--faint);
 }
 
+/* 音色选择 */
+.voice-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.voice-chip {
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  text-align: left;
+  cursor: pointer;
+  transition: border-color 0.18s var(--ease), background 0.18s var(--ease);
+}
+
+.voice-chip b {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.voice-chip em {
+  display: block;
+  margin-top: 4px;
+  font-style: normal;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--faint);
+}
+
+.voice-chip:hover {
+  border-color: rgba(255, 255, 255, 0.16);
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.voice-chip.is-on {
+  border-color: rgba(91, 140, 255, 0.75);
+  background: rgba(91, 140, 255, 0.12);
+}
+
+.voice-try {
+  margin-top: 12px;
+  padding: 8px 16px;
+  border-radius: 9px;
+  border: 1px solid rgba(91, 140, 255, 0.35);
+  background: rgba(91, 140, 255, 0.1);
+  color: #b7cdff;
+  font-size: 12.5px;
+  cursor: pointer;
+}
+
+.voice-try:hover {
+  background: rgba(91, 140, 255, 0.18);
+  color: #fff;
+}
+
 /* 开关：轨道两态，圆钮在行进途中被拉长再回落 */
 .ios-switch {
   position: relative;

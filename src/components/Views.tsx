@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { CASES } from '../data/cases';
 import { clearRecent, loadRecent } from '../lib/history';
 import { loadEnterSend, saveEnterSend } from '../lib/prefs';
+import { loadVoiceId, saveVoiceId, speak, VOICE_PRESETS } from '../lib/speech';
 import type { Session } from '../lib/session';
 import { PHOTOS, photoUrl, type BackdropSetting } from './Backdrop';
 import { SwitchRow } from './SwitchRow';
@@ -117,10 +118,16 @@ export function Profile({
   const { user } = session;
   const [model, setModel] = useState<string | null | undefined>(undefined);
   const [enterSend, setEnterSend] = useState(loadEnterSend);
+  const [voice, setVoice] = useState(loadVoiceId);
 
   function toggleEnter(on: boolean) {
     setEnterSend(on);
     saveEnterSend(on);
+  }
+
+  function pickVoice(id: string) {
+    setVoice(id);
+    saveVoiceId(id);
   }
 
   useEffect(() => {
@@ -161,7 +168,7 @@ export function Profile({
       <section className="bg-section">
         <h3>背景</h3>
         <p className="bg-hint">
-          五张实景按登录轮换，也可以固定一张，或者上传自己的照片。只存在本机。
+          {PHOTOS.length} 张实景按登录轮换，也可以固定一张，或者上传自己的照片。只存在本机。
         </p>
         <div className="bg-grid">
           {PHOTOS.map((p, i) => (
@@ -193,6 +200,29 @@ export function Profile({
               : '现在用 Ctrl + Enter 提交，回车换行'
           }
         />
+      </section>
+
+      <section className="bg-section">
+        <h3>语音</h3>
+        <p className="bg-hint">现场话术播报用的音色，选一个再试听。</p>
+        <div className="voice-grid">
+          {VOICE_PRESETS.map((v) => (
+            <button
+              key={v.id}
+              className={`voice-chip${voice === v.id ? ' is-on' : ''}`}
+              onClick={() => pickVoice(v.id)}
+            >
+              <b>{v.label}</b>
+              <em>{v.desc}</em>
+            </button>
+          ))}
+        </div>
+        <button
+          className="voice-try"
+          onClick={() => speak('您好，我是执勤民警，请出示您的护照和签证。', 'zh-CN')}
+        >
+          试听当前音色
+        </button>
       </section>
 
       <dl className="profile-list">
