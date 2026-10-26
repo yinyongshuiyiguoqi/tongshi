@@ -110,7 +110,9 @@ export function Dock({ value, onChange }: { value: TabKey; onChange: (k: TabKey)
     const glass = new LiquidGlass(el, {
       // tint 压到很低，让底下的真实画面透上来，亮度自然跟着背景走；
       // tintTone 交给 auto，亮背景偏亮、暗背景偏暗，而不是一块固定的灰。
-      tint: 0.56 + frost * 0.16,
+      // 染色固定，滑杆只改「虚化 + 折射」，也就是液态玻璃和毛玻璃的区别；
+      // 不让它顺手改明暗，否则又变成一根亮度滑杆。
+      tint: 0.62,
       tintTone: 'dark',
       frost,
       material: { refraction: 108 - frost * 88 },
