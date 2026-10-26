@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ChangeEvent } from 'react';
 import { CASES } from '../data/cases';
 import { clearRecent, loadRecent } from '../lib/history';
 import type { Session } from '../lib/session';
+import { PRESETS, type BackdropSetting } from './Backdrop';
 
 /* ───────── 情形库 ───────── */
 
@@ -103,11 +104,27 @@ export function HistoryView({ onPick }: { onPick: (text: string) => void }) {
 export function Profile({
   session,
   onLogout,
+  backdrop,
+  onBackdrop,
 }: {
   session: Session;
   onLogout: () => void;
+  backdrop: BackdropSetting;
+  onBackdrop: (s: BackdropSetting) => void;
 }) {
   const { user } = session;
+
+  function pickFile(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 4 * 1024 * 1024) {
+      alert('图片超过 4MB，换一张小一点的。');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => onBackdrop({ kind: 'custom', dataUrl: String(reader.result) });
+    reader.readAsDataURL(file);
+  }
 
   return (
     <div className="view">
@@ -125,6 +142,26 @@ export function Profile({
         </div>
       </div>
 
+      <section className="bg-section">
+        <h3>背景</h3>
+        <p className="bg-hint">选一张预设，或者用自己的照片。只存在本机。</p>
+        <div className="bg-grid">
+          {PRESETS.map((p) => (
+            <button
+              key={p.kind}
+              className={`bg-swatch sw-${p.kind}${backdrop.kind === p.kind ? ' is-on' : ''}`}
+              onClick={() => onBackdrop({ kind: p.kind })}
+            >
+              <span>{p.label}</span>
+            </button>
+          ))}
+          <label className={`bg-swatch sw-upload${backdrop.kind === 'custom' ? ' is-on' : ''}`}>
+            <input type="file" accept="image/*" hidden onChange={pickFile} />
+            <span>{backdrop.kind === 'custom' ? '已上传照片' : '上传照片'}</span>
+          </label>
+        </div>
+      </section>
+
       <dl className="profile-list">
         <div>
           <dt>登录方式</dt>
@@ -132,11 +169,11 @@ export function Profile({
         </div>
         <div>
           <dt>数据存储</dt>
-          <dd>记录只存在本机浏览器，不上传</dd>
+          <dd>记录与背景只存在本机浏览器，不上传</dd>
         </div>
         <div>
           <dt>版本</dt>
-          <dd>原型 v0.4 · 传智杯 2026</dd>
+          <dd>原型 v0.5 · 传智杯 2026</dd>
         </div>
       </dl>
 

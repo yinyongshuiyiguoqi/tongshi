@@ -1,10 +1,12 @@
 import { useState } from 'react';
 import { Login } from './components/Login';
 import { Workbench } from './components/Workbench';
+import { Backdrop, loadBackdrop, saveBackdrop, type BackdropSetting } from './components/Backdrop';
 import { clearSession, loadSession, saveSession, type Session } from './lib/session';
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(loadSession);
+  const [backdrop, setBackdrop] = useState<BackdropSetting>(loadBackdrop);
 
   function handleLogin(s: Session) {
     saveSession(s);
@@ -16,15 +18,26 @@ export default function App() {
     setSession(null);
   }
 
+  function changeBackdrop(next: BackdropSetting) {
+    saveBackdrop(next);
+    setBackdrop(next);
+  }
+
   return (
     <>
-      <div className="aurora" aria-hidden="true">
+      <Backdrop setting={backdrop} />
+      <div className={`aurora${backdrop.kind !== 'none' ? ' is-dim' : ''}`} aria-hidden="true">
         <span className="a1" />
         <span className="a2" />
         <span className="a3" />
       </div>
       {session ? (
-        <Workbench session={session} onLogout={handleLogout} />
+        <Workbench
+          session={session}
+          onLogout={handleLogout}
+          backdrop={backdrop}
+          onBackdrop={changeBackdrop}
+        />
       ) : (
         <Login onLogin={handleLogin} />
       )}

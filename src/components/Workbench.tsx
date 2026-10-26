@@ -7,6 +7,7 @@ import { Empty } from './Empty';
 import { ResultCard } from './ResultCard';
 import { AiFallback } from './AiFallback';
 import { CaseLibrary, HistoryView, Profile } from './Views';
+import type { BackdropSetting } from './Backdrop';
 import { Dock, type TabKey } from './Dock';
 
 const EXAMPLES = [
@@ -18,9 +19,13 @@ const EXAMPLES = [
 export function Workbench({
   session,
   onLogout,
+  backdrop,
+  onBackdrop,
 }: {
   session: Session;
   onLogout: () => void;
+  backdrop: BackdropSetting;
+  onBackdrop: (s: BackdropSetting) => void;
 }) {
   const [tab, setTab] = useState<TabKey>('query');
   const [input, setInput] = useState('');
@@ -203,7 +208,12 @@ export function Workbench({
 
       {tab === 'profile' && (
         <main className="work single">
-          <Profile session={session} onLogout={onLogout} />
+          <Profile
+            session={session}
+            onLogout={onLogout}
+            backdrop={backdrop}
+            onBackdrop={onBackdrop}
+          />
         </main>
       )}
 
