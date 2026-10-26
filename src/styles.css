@@ -1348,8 +1348,75 @@ textarea {
 
 .r-speak {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin-top: 12px;
+}
+
+/* 其他语种译文 */
+.r-other {
+  margin-top: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 1px solid rgba(91, 140, 255, 0.16);
+  background: rgba(91, 140, 255, 0.07);
+}
+
+.r-other-tag {
+  display: inline-block;
+  margin-bottom: 6px;
+  font-size: 11px;
+  letter-spacing: 0.03em;
+  color: #9dc0ff;
+}
+
+.r-other p {
+  font-size: 14px;
+  line-height: 1.8;
+  color: #e7eefc;
+}
+
+/* 语种菜单 */
+.lang-wrap {
+  position: relative;
+}
+
+.lang-menu {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 30;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(84px, 1fr));
+  gap: 4px;
+  padding: 8px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: rgba(13, 16, 23, 0.97);
+  box-shadow: 0 26px 50px -24px rgba(0, 0, 0, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+
+.lang-menu button {
+  padding: 7px 10px;
+  border-radius: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--muted);
+  font-size: 12px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+.lang-menu button:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #fff;
+}
+
+.lang-menu button.is-on {
+  background: rgba(91, 140, 255, 0.16);
+  color: #cfe0ff;
 }
 
 .r-speak button {

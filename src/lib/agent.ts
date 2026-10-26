@@ -106,6 +106,26 @@ export interface ChatContext {
   history: ChatMessage[];
 }
 
+/** 把一段中文话术翻成目标语言，供现场念给对方听 */
+export async function translateText(
+  text: string,
+  lang: string,
+  token: string,
+  signal?: AbortSignal,
+  code?: string,
+): Promise<string> {
+  const res = await fetch('/api/translate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ text, lang, code }),
+    signal,
+  });
+  if (!res.ok) throw new Error(`translate ${res.status}`);
+  const data = (await res.json()) as { text?: string; message?: string };
+  if (!data.text) throw new Error(data.message || '没有拿到译文');
+  return data.text;
+}
+
 /** 在一条已出的结果上继续追问 */
 export function runChat(
   ctx: ChatContext,

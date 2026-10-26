@@ -1,6 +1,6 @@
 /** 现场话术的语音播报，走浏览器自带的 speechSynthesis，不联网也不调接口 */
 
-export type SpeakLang = 'zh-CN' | 'en-US';
+export type SpeakLang = string;
 
 export function canSpeak(): boolean {
   return typeof window !== 'undefined' && 'speechSynthesis' in window;

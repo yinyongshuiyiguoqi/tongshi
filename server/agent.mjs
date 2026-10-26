@@ -484,6 +484,44 @@ async function runChat({ history = [], title = '', brief = '', provisionIds = []
   emit({ type: 'done', mock: false });
 }
 
+// ── 话术翻译 ────────────────────────────────────────────────
+// 模型偶尔会把中文原样返回（实测日语遇到过长句时会这样），
+// 所以翻完要先验一下：是不是原文、是不是真的换成目标语言的文字。
+const SCRIPT_RE = {
+  ja: /[぀-ヿ]/, // 假名
+  ko: /[가-힯]/, // 谚文
+  ru: /[Ѐ-ӿ]/, // 西里尔
+  ar: /[؀-ۿ]/, // 阿拉伯
+  th: /[฀-๿]/, // 泰文
+  hi: /[ऀ-ॿ]/, // 天城文
+};
+
+function looksTranslated(out, src, code) {
+  const o = String(out || '').trim();
+  if (!o || o === String(src || '').trim()) return false;
+  const re = SCRIPT_RE[String(code || '').slice(0, 2).toLowerCase()];
+  if (re && !re.test(o)) return false;
+  return true;
+}
+
+async function translate(text, lang, code) {
+  const base =
+    `你是中国警察的现场口译。把用户给出的中文翻译成${lang}，用于当面告知外籍当事人。` +
+    '要求：语气礼貌、句子简短、保持原意，只输出译文，不要解释，不要加引号，不要保留中文原文。';
+
+  const ask = (system) =>
+    chat([
+      { role: 'system', content: system },
+      { role: 'user', content: text },
+    ]).then((r) => String(r?.choices?.[0]?.message?.content || '').trim());
+
+  let out = await ask(base);
+  if (looksTranslated(out, text, code)) return out;
+
+  out = await ask(`${base}\n注意：上一次输出原样照抄了中文。这次必须全部换成${lang}，不能留一个汉字。`);
+  return looksTranslated(out, text, code) ? out : '';
+}
+
 // ── 登录与会话 ──────────────────────────────────────────────
 // 演示账号写在服务端，前端拿不到；令牌用 HMAC 签名，带 12 小时有效期。
 const DEFAULT_SECRET = 'tongshi-demo-secret-change-me';
@@ -663,6 +701,50 @@ const server = http.createServer(async (req, res) => {
   if (!payload) {
     res.writeHead(401, { 'Content-Type': 'application/json' });
     res.end(JSON.stringify({ message: '登录已失效，请重新登录' }));
+    return;
+  }
+
+  // 话术翻译：现场念给对方听，返回整段译文，不需要流式
+  if (req.url === '/api/translate' && req.method === 'POST') {
+    if (tooMany(ip, 'translate', 30, 60_000)) {
+      res.writeHead(429, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ message: '请求过于频繁，请稍后再试' }));
+      return;
+    }
+
+    let tb = {};
+    try {
+      tb = JSON.parse(raw);
+    } catch {
+      res.writeHead(400).end('bad json');
+      return;
+    }
+
+    const text = String(tb.text || '').slice(0, 600);
+    const lang = String(tb.lang || '').slice(0, 20);
+    if (!text || !lang) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ message: '缺少话术或目标语言' }));
+      return;
+    }
+
+    if (!LLM_KEY) {
+      res.writeHead(503, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ message: '没有配置模型，暂时不能翻译' }));
+      return;
+    }
+
+    try {
+      const code = String(tb.code || '');
+      const out = await translate(text, lang, code);
+      if (!out) throw new Error('模型没有给出可用的译文，请换个语种或稍后重试');
+
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ text: out }));
+    } catch (err) {
+      res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify({ message: String(err?.message || err) }));
+    }
     return;
   }
 

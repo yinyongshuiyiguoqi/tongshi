@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { provisionById } from '../data/cases';
 import type { MatchResult } from '../lib/match';
-import { canSpeak, speak, stopSpeaking, type SpeakLang } from '../lib/speech';
 import { CaseBrief } from './CaseBrief';
+import { ScriptItem } from './ScriptItem';
 
 export function ResultCard({
   result,
@@ -21,30 +21,6 @@ export function ResultCard({
 }) {
   const { item, score, hits } = result;
   const [toast, setToast] = useState('');
-  const [speaking, setSpeaking] = useState('');
-
-  useEffect(() => () => stopSpeaking(), []);
-
-  function toggleSpeak(text: string, lang: SpeakLang, key: string) {
-    if (speaking === key) {
-      stopSpeaking();
-      setSpeaking('');
-      return;
-    }
-    if (!speak(text, lang)) {
-      setToast('当前浏览器不支持语音播报');
-      window.setTimeout(() => setToast(''), 1800);
-      return;
-    }
-    setSpeaking(key);
-    // 播完自动复位
-    const check = window.setInterval(() => {
-      if (!window.speechSynthesis.speaking) {
-        setSpeaking('');
-        window.clearInterval(check);
-      }
-    }, 400);
-  }
 
   const provisions = item.provisionIds
     .map((id) => provisionById(id))
@@ -133,28 +109,7 @@ export function ResultCard({
         <h2>现场话术</h2>
         <div className="r-scripts">
           {item.scripts.map((s, i) => (
-            <div key={i} className="r-script">
-              <p className="r-zh">{s.zh}</p>
-              {s.en && <p className="r-en">{s.en}</p>}
-              {canSpeak() && (
-                <div className="r-speak">
-                  <button
-                    className={speaking === `${i}-zh` ? 'is-on' : ''}
-                    onClick={() => toggleSpeak(s.zh, 'zh-CN', `${i}-zh`)}
-                  >
-                    {speaking === `${i}-zh` ? '停止' : '播报中文'}
-                  </button>
-                  {s.en && (
-                    <button
-                      className={speaking === `${i}-en` ? 'is-on' : ''}
-                      onClick={() => toggleSpeak(s.en as string, 'en-US', `${i}-en`)}
-                    >
-                      {speaking === `${i}-en` ? 'Stop' : 'Play English'}
-                    </button>
-                  )}
-                </div>
-              )}
-            </div>
+            <ScriptItem key={i} script={s} token={token} />
           ))}
         </div>
       </section>
