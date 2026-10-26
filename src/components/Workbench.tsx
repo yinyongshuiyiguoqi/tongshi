@@ -6,6 +6,8 @@ import type { Session } from '../lib/session';
 import { Empty } from './Empty';
 import { ResultCard } from './ResultCard';
 import { AiFallback } from './AiFallback';
+import { CaseLibrary, HistoryView, Profile } from './Views';
+import { Dock, type TabKey } from './Dock';
 
 const EXAMPLES = [
   '小区门口一个外国人拿不出护照，只会说英语，问他来干什么也说不清',
@@ -20,6 +22,7 @@ export function Workbench({
   session: Session;
   onLogout: () => void;
 }) {
+  const [tab, setTab] = useState<TabKey>('query');
   const [input, setInput] = useState('');
   const [query, setQuery] = useState('');
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -106,6 +109,8 @@ export function Workbench({
     setInput(text);
     setQuery('');
     setActiveId(null);
+    setTab('query');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   return (
@@ -119,77 +124,90 @@ export function Workbench({
         <span className="sub">涉外执法现场辅助</span>
         <div className="top-right">
           <span className="user">
-            {session.user.name} · {session.user.unit} · {session.user.badge}
+            {session.user.name} · {session.user.unit}
           </span>
-          <button className="ghost-btn" onClick={onLogout}>
-            退出
-          </button>
         </div>
       </header>
 
-      <main className="work">
-        <section className="compose">
-          <h2>现场情况</h2>
-          <p className="hint-line">
-            用平时的说法描述就行，不用套格式。时间、地点、国籍、对方说了什么，知道多少写多少。
-          </p>
+      {tab === 'query' && (
+        <main className="work">
+          <section className="compose">
+            <h2>现场情况</h2>
+            <p className="hint-line">
+              用平时的说法描述就行，不用套格式。时间、地点、国籍、对方说了什么，知道多少写多少。
+            </p>
 
-          <textarea
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="例如：小区门口一个外国人拿不出护照，只会说英语……"
-            rows={7}
-            spellCheck={false}
-          />
-
-          <div className="compose-actions">
-            {speechOk && (
-              <button className={`mic${listening ? ' is-rec' : ''}`} onClick={toggleSpeech}>
-                {listening ? '正在听…' : '语音输入'}
-              </button>
-            )}
-            <button className="primary" onClick={analyse}>
-              查找处置方案
-            </button>
-            {query && (
-              <button className="ghost-btn" onClick={reset}>
-                清空
-              </button>
-            )}
-          </div>
-          <p className="kbd-tip">Ctrl + Enter 提交</p>
-
-          <div className="examples">
-            <span className="label">试试这些</span>
-            {EXAMPLES.map((ex, i) => (
-              <button key={i} className="example" onClick={() => pick(ex)}>
-                {ex}
-              </button>
-            ))}
-          </div>
-        </section>
-
-        <section className="result" ref={resultRef}>
-          {!query && <Empty onPick={pick} />}
-
-          {query && !active && <AiFallback input={query} token={session.token} />}
-
-          {query && active && (
-            <ResultCard
-              result={active}
-              matches={matches}
-              low={lowConfidence}
-              onPick={(id) => setActiveId(id)}
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              placeholder="例如：小区门口一个外国人拿不出护照，只会说英语……"
+              rows={7}
+              spellCheck={false}
             />
-          )}
-        </section>
-      </main>
 
-      {query && (
-        <button className="jump" onClick={scrollToResult}>
-          回到结果
-        </button>
+            <div className="compose-actions">
+              {speechOk && (
+                <button className={`mic${listening ? ' is-rec' : ''}`} onClick={toggleSpeech}>
+                  {listening ? '正在听…' : '语音输入'}
+                </button>
+              )}
+              <button className="primary" onClick={analyse}>
+                查找处置方案
+              </button>
+              {query && (
+                <button className="ghost-btn" onClick={reset}>
+                  清空
+                </button>
+              )}
+            </div>
+            <p className="kbd-tip">Ctrl + Enter 提交</p>
+
+            <div className="examples">
+              <span className="label">试试这些</span>
+              {EXAMPLES.map((ex, i) => (
+                <button key={i} className="example" onClick={() => pick(ex)}>
+                  {ex}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="result" ref={resultRef}>
+            {!query && <Empty onPick={pick} />}
+
+            {query && !active && <AiFallback input={query} token={session.token} />}
+
+            {query && active && (
+              <ResultCard
+                result={active}
+                matches={matches}
+                low={lowConfidence}
+                onPick={(id) => setActiveId(id)}
+              />
+            )}
+          </section>
+        </main>
       )}
+
+      {tab === 'cases' && (
+        <main className="work single">
+          <CaseLibrary onPick={pick} />
+        </main>
+      )}
+
+      {tab === 'history' && (
+        <main className="work single">
+          <HistoryView onPick={pick} />
+        </main>
+      )}
+
+      {tab === 'profile' && (
+        <main className="work single">
+          <Profile session={session} onLogout={onLogout} />
+        </main>
+      )}
+
+      <Dock value={tab} onChange={setTab} />
 
       {toast && <div className="toast">{toast}</div>}
     </div>

@@ -17,6 +17,14 @@ export function loadRecent(): RecentItem[] {
   }
 }
 
+export function clearRecent() {
+  try {
+    localStorage.removeItem(KEY);
+  } catch {
+    // 忽略
+  }
+}
+
 export function pushRecent(text: string, title: string) {
   try {
     const list = loadRecent().filter((r) => r.text !== text);
