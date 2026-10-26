@@ -1,7 +1,29 @@
 /** 本机偏好设置，只存 localStorage，不上传 */
 
 const ENTER_KEY = 'tongshi.enterSend';
+const DOCK_KEY = 'tongshi.dockTint';
 const EVENT = 'tongshi:prefs';
+
+/** 底栏玻璃浓度：0 最通透，1 最厚重。默认沿用之前调好的 0.72 */
+export function loadDockTint(): number {
+  try {
+    const raw = localStorage.getItem(DOCK_KEY);
+    if (raw === null) return 0.72;
+    const v = Number(raw);
+    return Number.isFinite(v) && v >= 0 && v <= 1 ? v : 0.72;
+  } catch {
+    return 0.72;
+  }
+}
+
+export function saveDockTint(v: number) {
+  try {
+    localStorage.setItem(DOCK_KEY, String(v));
+  } catch {
+    // 忽略
+  }
+  window.dispatchEvent(new Event(EVENT));
+}
 
 export function loadEnterSend(): boolean {
   try {

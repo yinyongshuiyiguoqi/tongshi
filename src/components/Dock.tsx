@@ -4,10 +4,12 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react';
 import { LiquidGlass } from 'apple-liquid-glass-webgl';
+import { loadDockTint, onPrefsChange } from '../lib/prefs';
 
 export type TabKey = 'query' | 'cases' | 'history' | 'profile';
 
@@ -84,13 +86,28 @@ export function Dock({ value, onChange }: { value: TabKey; onChange: (k: TabKey)
   const lensRef = useRef<{ x: number; w: number }>({ x: 0, w: 0 });
   const settled = useRef(false);
 
+  const [tint, setTint] = useState(loadDockTint);
+  const tintTimer = useRef<number | undefined>(undefined);
+
+  useEffect(
+    () =>
+      onPrefsChange(() => {
+        // 拖动滑杆会连续触发，攒一下再重建玻璃，避免反复创建 WebGL 上下文
+        window.clearTimeout(tintTimer.current);
+        tintTimer.current = window.setTimeout(() => setTint(loadDockTint()), 160);
+      }),
+    [],
+  );
+
+  useEffect(() => () => window.clearTimeout(tintTimer.current), []);
+
   useEffect(() => {
     const el = hostRef.current;
     if (!el) return;
     // tint 高一点、frost 低一点：玻璃跟着背景的明暗走，保留折射，别糊成一片奶白
-    const glass = new LiquidGlass(el, { tint: 0.72, tintTone: 'dark', frost: 0.32, radius: 30 });
+    const glass = new LiquidGlass(el, { tint, tintTone: 'dark', frost: 0.32, radius: 30 });
     return () => glass.destroy();
-  }, []);
+  }, [tint]);
 
   const measure = useCallback(() => {
     const host = hostRef.current;
@@ -241,7 +258,13 @@ export function Dock({ value, onChange }: { value: TabKey; onChange: (k: TabKey)
       };
 
   return (
-    <nav className="dock" ref={hostRef} aria-label="主导航" onPointerDown={onPointerDown}>
+    <nav
+      className="dock"
+      ref={hostRef}
+      aria-label="主导航"
+      onPointerDown={onPointerDown}
+      style={{ '--dock-alpha': (0.32 - tint * 0.22).toFixed(2) } as CSSProperties}
+    >
       <span className={`dock-lens${dragging ? ' is-drag' : ''}`} style={style} aria-hidden="true" />
       {ITEMS.map((it, i) => (
         <button

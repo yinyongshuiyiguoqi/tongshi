@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { CASES } from '../data/cases';
 import { clearRecent, loadRecent } from '../lib/history';
-import { loadEnterSend, saveEnterSend } from '../lib/prefs';
+import { loadDockTint, loadEnterSend, saveDockTint, saveEnterSend } from '../lib/prefs';
 import { loadVoiceId, saveVoiceId, speak, VOICE_PRESETS } from '../lib/speech';
 import type { Session } from '../lib/session';
 import { PHOTOS, photoUrl, type BackdropSetting } from './Backdrop';
@@ -119,6 +119,7 @@ export function Profile({
   const [model, setModel] = useState<string | null | undefined>(undefined);
   const [enterSend, setEnterSend] = useState(loadEnterSend);
   const [voice, setVoice] = useState(loadVoiceId);
+  const [dockTint, setDockTint] = useState(loadDockTint);
 
   function toggleEnter(on: boolean) {
     setEnterSend(on);
@@ -200,6 +201,33 @@ export function Profile({
               : '现在用 Ctrl + Enter 提交，回车换行'
           }
         />
+      </section>
+
+      <section className="bg-section">
+        <h3>外观</h3>
+        <div className="pref-row is-static">
+          <div className="pref-text">
+            <b>底栏透明度</b>
+            <em>往右拉更通透，让背景从底栏里透出来；往左拉更厚重，字更清楚</em>
+          </div>
+          <span className="pref-val">{Math.round(((1 - dockTint) / 0.85) * 100)}%</span>
+          <input
+            className="ios-range"
+            type="range"
+            min={0}
+            max={100}
+            step={1}
+            value={Math.round(((1 - dockTint) / 0.85) * 100)}
+            aria-label="底栏透明度"
+            onChange={(e) => {
+              const pct = Number(e.target.value);
+              const next = 1 - (pct / 100) * 0.85;
+              setDockTint(next);
+              saveDockTint(next);
+            }}
+            style={{ ['--fill' as string]: `${Math.round(((1 - dockTint) / 0.85) * 100)}%` }}
+          />
+        </div>
       </section>
 
       <section className="bg-section">
