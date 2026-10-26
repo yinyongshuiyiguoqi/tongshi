@@ -318,14 +318,61 @@ async function runAgent(input, emit) {
   }
 
   emit({ type: 'step', name: '组织研判' });
-  let out = '';
-  await chatStream(messages, (text) => {
-    out += text;
-    emit({ type: 'delta', text });
+
+  // 和情形库的结果卡保持同一套分区：判断、流程、话术、注意事项分开给
+  const ask =
+    '根据上面检索到的条文，按下面这个 JSON 结构作答，只输出 JSON，不要代码块、不要解释：\n' +
+    '{"title":"不超过12字的情形名","judgement":"一句判断，不超过80字",' +
+    '"steps":["处置步骤1","处置步骤2","处置步骤3"],' +
+    '"scriptZh":"现场对当事人说的话，40到80字，礼貌口语",' +
+    '"scriptEn":"scriptZh 的英文",' +
+    '"note":"还需核实什么，一句话"}';
+
+  let data = null;
+  let raw = '';
+  try {
+    const r = await chat([...messages, { role: 'user', content: ask }]);
+    raw = String(r?.choices?.[0]?.message?.content || '').trim();
+    const body = raw.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+    const obj = JSON.parse(body);
+    if (obj && (obj.judgement || obj.steps?.length)) {
+      data = {
+        title: String(obj.title || '').slice(0, 20),
+        judgement: String(obj.judgement || '').slice(0, 200),
+        steps: Array.isArray(obj.steps) ? obj.steps.slice(0, 6).map((s) => String(s).slice(0, 120)) : [],
+        scriptZh: String(obj.scriptZh || '').slice(0, 300),
+        scriptEn: String(obj.scriptEn || '').slice(0, 400),
+        note: String(obj.note || '').slice(0, 160),
+      };
+    }
+  } catch {
+    /* 结构化失败就退回整段文字 */
+  }
+
+  if (!data) {
+    // 模型没按格式来：把原文按字推回去，界面照样能看
+    const text = raw;
+    for (const ch of text) emit({ type: 'delta', text: ch });
+    const bad = unmatchedCitations(text, allArticles);
+    if (bad.length) emit({ type: 'verify', unmatched: bad });
+    emit({ type: 'done', mock: false });
+    return;
+  }
+
+  // 两次检索会捞到同一条，按法名+条号去重再给前端
+  const seen = new Set();
+  const articles = allArticles.filter((a) => {
+    const key = `${normLaw(a.law)}|${artNum(a.num)}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
   });
 
-  const bad = unmatchedCitations(out, allArticles);
+  const joined = [data.judgement, ...data.steps, data.scriptZh, data.note].join(' ');
+  const bad = unmatchedCitations(joined, articles);
   if (bad.length) emit({ type: 'verify', unmatched: bad });
+
+  emit({ type: 'result', data, articles });
   emit({ type: 'done', mock: false });
 }
 

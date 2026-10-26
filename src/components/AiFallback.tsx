@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { CASES } from '../data/cases';
-import { runAgent } from '../lib/agent';
+import { runAgent, type AgentResult } from '../lib/agent';
 import { hasLawApi, searchLaw, type LawArticle } from '../lib/legal';
 import { hasLLM, streamGeneral } from '../lib/ai';
 import { SpeakBar } from './SpeakBar';
+import { AgentCard } from './AgentCard';
 
 export function AiFallback({ input, token }: { input: string; token: string }) {
   const [text, setText] = useState('');
@@ -13,6 +14,8 @@ export function AiFallback({ input, token }: { input: string; token: string }) {
   const [viaAgent, setViaAgent] = useState(false);
   const [localLaw, setLocalLaw] = useState(false);
   const [lawFallback, setLawFallback] = useState('');
+  const [result, setResult] = useState<AgentResult | null>(null);
+  const [unmatched, setUnmatched] = useState<string[]>([]);
   const [lawState, setLawState] = useState<'off' | 'ok' | 'error'>(
     hasLawApi ? 'ok' : 'off',
   );
@@ -25,6 +28,8 @@ export function AiFallback({ input, token }: { input: string; token: string }) {
     setViaAgent(false);
     setLocalLaw(false);
     setLawFallback('');
+    setResult(null);
+    setUnmatched([]);
 
     let cancelled = false;
     const ac = new AbortController();
@@ -51,6 +56,13 @@ export function AiFallback({ input, token }: { input: string; token: string }) {
                 break;
               case 'delta':
                 setText((t) => t + e.text);
+                break;
+              case 'result':
+                setResult(e.data);
+                setArticles(e.articles);
+                break;
+              case 'verify':
+                setUnmatched(e.unmatched);
                 break;
               case 'done':
                 agentDone = true;
@@ -113,6 +125,25 @@ export function AiFallback({ input, token }: { input: string; token: string }) {
       ac.abort();
     };
   }, [input, token]);
+
+  if (result) {
+    return (
+      <>
+        {lawFallback && (
+          <p className="low-warn">
+            在线法规检索失败（{lawFallback}），本次依据已回退本地法条库。
+          </p>
+        )}
+        <AgentCard
+          data={result}
+          articles={articles}
+          trace={steps}
+          unmatched={unmatched}
+          token={token}
+        />
+      </>
+    );
+  }
 
   return (
     <article className="card ai-card">

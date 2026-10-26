@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CaseItem } from '../data/cases';
 import { runBrief } from '../lib/agent';
+import { SpeakBar } from './SpeakBar';
 
 /**
  * 命中情形后的个性化研判。
@@ -97,6 +98,8 @@ export function CaseBrief({ item, input, token }: { item: CaseItem; input: strin
         </button>
         <span className="r-brief-note">AI 生成，仅作研判参考，处置决定由执法人员作出</span>
       </div>
+
+      <SpeakBar text={state === 'fail' ? item.brief : text} token={token} compact />
     </section>
   );
 }

@@ -9,6 +9,15 @@ import type { LawArticle } from './legal';
  * 服务端没启动时 fetch 会失败，调用方自行回落到前端直连。
  */
 
+export interface AgentResult {
+  title: string;
+  judgement: string;
+  steps: string[];
+  scriptZh: string;
+  scriptEn: string;
+  note: string;
+}
+
 export type AgentEvent =
   | { type: 'step'; name: string; detail?: string }
   | {
@@ -22,6 +31,7 @@ export type AgentEvent =
       reason?: string;
     }
   | { type: 'delta'; text: string }
+  | { type: 'result'; data: AgentResult; articles: LawArticle[] }
   | { type: 'verify'; unmatched: string[] }
   | { type: 'done'; mock?: boolean }
   | { type: 'error'; message: string };

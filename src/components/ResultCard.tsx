@@ -3,6 +3,7 @@ import { provisionById } from '../data/cases';
 import type { MatchResult } from '../lib/match';
 import { CaseBrief } from './CaseBrief';
 import { ScriptItem } from './ScriptItem';
+import { SpeakBar } from './SpeakBar';
 
 export function ResultCard({
   result,
@@ -103,6 +104,11 @@ export function ResultCard({
             </li>
           ))}
         </ol>
+        <SpeakBar
+          text={item.steps.map((s, i) => `${i + 1}、${s}`).join(' ')}
+          token={token}
+          compact
+        />
       </section>
 
       <section className="r-block">
@@ -137,6 +143,13 @@ export function ResultCard({
             </li>
           ))}
         </ul>
+        <SpeakBar
+          text={provisions
+            .map((p) => `《${p.law}》${p.article}：${p.summary}`)
+            .join(' ')}
+          token={token}
+          compact
+        />
       </section>
 
       <section className="r-block r-notes">
