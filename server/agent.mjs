@@ -504,6 +504,39 @@ function looksTranslated(out, src, code) {
   return true;
 }
 
+/**
+ * 不知道对方说什么语言时用这个：让模型先认语言再翻译。
+ * 返回 { from, text }，认不出来就退回普通翻译。
+ */
+async function translateAuto(text, lang, code) {
+  const sys =
+    `你是中国警察的现场口译。先判断下面这段话是哪种语言，再翻译成${lang}。` +
+    '只输出一行 JSON，不要代码块、不要解释，格式：{"from":"源语言的中文名称","text":"译文"}。';
+
+  const r = await chat([
+    { role: 'system', content: sys },
+    { role: 'user', content: text },
+  ]);
+  const raw = String(r?.choices?.[0]?.message?.content || '').trim();
+  const body = raw.replace(/^```(?:json)?/i, '').replace(/```$/, '').trim();
+
+  try {
+    const obj = JSON.parse(body);
+    const from = String(obj?.from || '').slice(0, 20);
+    const out = String(obj?.text || '').trim();
+
+    // 源语言和目标语言是同一个，原样返回，别让模型来回折腾
+    if (from && from === lang) return { from, text: text.trim() };
+
+    if (out && out !== text.trim()) return { from, text: out };
+  } catch {
+    /* 落到普通翻译 */
+  }
+
+  const fallback = await translate(text, lang, code);
+  return { from: '', text: fallback };
+}
+
 async function translate(text, lang, code) {
   const base =
     `你是中国警察的现场口译。把用户给出的中文翻译成${lang}，用于当面告知外籍当事人。` +
@@ -736,11 +769,16 @@ const server = http.createServer(async (req, res) => {
 
     try {
       const code = String(tb.code || '');
-      const out = await translate(text, lang, code);
-      if (!out) throw new Error('模型没有给出可用的译文，请换个语种或稍后重试');
+      const detect = Boolean(tb.detect);
+
+      const result = detect
+        ? await translateAuto(text, lang, code)
+        : { from: '', text: await translate(text, lang, code) };
+
+      if (!result.text) throw new Error('模型没有给出可用的译文，请换个语种或稍后重试');
 
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
-      res.end(JSON.stringify({ text: out }));
+      res.end(JSON.stringify(result));
     } catch (err) {
       res.writeHead(502, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify({ message: String(err?.message || err) }));

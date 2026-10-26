@@ -55,7 +55,7 @@ export function ScriptItem({
     setTranslated('');
     setLoading(true);
     try {
-      const text = await translateText(script.zh, lang.name, token, undefined, lang.code);
+      const { text } = await translateText(script.zh, lang.name, token, undefined, lang.code);
       cache.current.set(lang.code, text);
       setTranslated(text);
     } catch (err) {

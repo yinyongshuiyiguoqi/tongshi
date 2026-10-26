@@ -7,6 +7,7 @@ import { Empty } from './Empty';
 import { ResultCard } from './ResultCard';
 import { AiFallback } from './AiFallback';
 import { FollowUp } from './FollowUp';
+import { Translator } from './Translator';
 import { isEnterSend, loadEnterSend, onPrefsChange } from '../lib/prefs';
 import { CaseLibrary, HistoryView, Profile } from './Views';
 import type { BackdropSetting } from './Backdrop';
@@ -15,7 +16,6 @@ import { Dock, type TabKey } from './Dock';
 const EXAMPLES = [
   '小区门口一个外国人拿不出护照，只会说英语，问他来干什么也说不清',
   '有个老外住在朋友家一个多星期了，一直没去派出所登记住宿',
-  '酒吧门口两个外国人喝多了在闹事，其中一个躺在地上起不来',
 ];
 
 export function Workbench({
@@ -188,6 +188,8 @@ export function Workbench({
                 </button>
               ))}
             </div>
+
+            <Translator token={session.token} />
           </section>
 
           <section className="result" ref={resultRef}>

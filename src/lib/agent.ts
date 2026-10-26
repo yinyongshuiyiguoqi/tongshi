@@ -107,23 +107,30 @@ export interface ChatContext {
 }
 
 /** 把一段中文话术翻成目标语言，供现场念给对方听 */
+export interface TranslateResult {
+  text: string;
+  /** 自动识别时模型给出的源语言名称 */
+  from?: string;
+}
+
 export async function translateText(
   text: string,
   lang: string,
   token: string,
   signal?: AbortSignal,
   code?: string,
-): Promise<string> {
+  detect?: boolean,
+): Promise<TranslateResult> {
   const res = await fetch('/api/translate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ text, lang, code }),
+    body: JSON.stringify({ text, lang, code, detect }),
     signal,
   });
   if (!res.ok) throw new Error(`translate ${res.status}`);
-  const data = (await res.json()) as { text?: string; message?: string };
+  const data = (await res.json()) as { text?: string; from?: string; message?: string };
   if (!data.text) throw new Error(data.message || '没有拿到译文');
-  return data.text;
+  return { text: data.text, from: data.from };
 }
 
 /** 在一条已出的结果上继续追问 */
