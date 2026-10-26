@@ -3,6 +3,7 @@ import { CASES } from '../data/cases';
 import { runAgent } from '../lib/agent';
 import { hasLawApi, searchLaw, type LawArticle } from '../lib/legal';
 import { hasLLM, streamGeneral } from '../lib/ai';
+import { SpeakBar } from './SpeakBar';
 
 export function AiFallback({ input, token }: { input: string; token: string }) {
   const [text, setText] = useState('');
@@ -150,10 +151,13 @@ export function AiFallback({ input, token }: { input: string; token: string }) {
       )}
 
       {hasLLM || viaAgent ? (
-        <p className="advice">
-          {text || <span className="hint">{done ? '没有返回内容，请重试' : '生成中…'}</span>}
-          {!done && text && <span className="caret" />}
-        </p>
+        <>
+          <p className="advice">
+            {text || <span className="hint">{done ? '没有返回内容，请重试' : '生成中…'}</span>}
+            {!done && text && <span className="caret" />}
+          </p>
+          {done && <SpeakBar text={text} token={token} />}
+        </>
       ) : (
         <p className="advice dim">
           {articles.length > 0

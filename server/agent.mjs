@@ -652,8 +652,19 @@ function serveStatic(req, res) {
     res.end('not found');
     return;
   }
+  const ext = path.extname(file).toLowerCase();
+
+  // 页面本身不缓存，改完刷新就能看到；
+  // assets 带内容哈希，可以长缓存；背景图名字固定，用短一点的缓存。
+  const cache = ext === '.html'
+    ? 'no-cache, must-revalidate'
+    : file.includes(`${path.sep}assets${path.sep}`)
+      ? 'public, max-age=31536000, immutable'
+      : 'public, max-age=86400';
+
   res.writeHead(200, {
-    'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
+    'Content-Type': MIME[ext] || 'application/octet-stream',
+    'Cache-Control': cache,
   });
   res.end(readFileSync(file));
 }
