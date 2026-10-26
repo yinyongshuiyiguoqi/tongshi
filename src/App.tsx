@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CASES, provisionById, type CaseItem } from './data/cases';
 import { LOW_CONFIDENCE, matchCases, type MatchResult } from './lib/match';
-import { hasLLM, streamAnalyse } from './lib/ai';
+import { hasLLM, streamAnalyse, streamGeneral } from './lib/ai';
 
 const SESSION_KEY = 'tongshi.session';
 
@@ -298,16 +298,7 @@ function Workbench({ session, onLogout }: { session: Session; onLogout: () => vo
         <section className="result" ref={resultRef}>
           {!query && <Empty />}
 
-          {query && matches.length === 0 && (
-            <div className="no-match">
-              <h2>没有匹配到明确情形</h2>
-              <p>
-                系统没有在情形库里找到足够接近的条目。可以补充这些信息再试：对方国籍、具体行为、
-                是否持有证件、有没有人受伤、现场能否沟通。
-              </p>
-              <p className="hint-line">仍然无法判断的，按现行程序上报，不要凭系统结果处理。</p>
-            </div>
-          )}
+          {query && !active && <AiFallback input={query} />}
 
           {query && active && (
             <>
@@ -478,6 +469,57 @@ function ResultCard({
       <p className="followup">
         <b>还需要确认</b>
         {item.followUp}
+      </p>
+    </article>
+  );
+}
+
+function AiFallback({ input }: { input: string }) {
+  const [text, setText] = useState('');
+  const [done, setDone] = useState(false);
+
+  useEffect(() => {
+    setText('');
+    setDone(false);
+    if (!hasLLM) return;
+
+    const ac = new AbortController();
+    streamGeneral(
+      input,
+      (d) => setText((t) => t + d),
+      ac.signal,
+    )
+      .then(() => setDone(true))
+      .catch(() => setDone(true));
+
+    return () => ac.abort();
+  }, [input]);
+
+  return (
+    <article className="card ai-card">
+      <div className="card-head">
+        <div>
+          <span className="card-kicker">AI 研判 · 未匹配情形库</span>
+          <h2>按描述给出处置思路</h2>
+        </div>
+      </div>
+
+      {hasLLM ? (
+        <p className="advice">
+          {text || <span className="hint">生成中…</span>}
+          {!done && text && <span className="caret" />}
+        </p>
+      ) : (
+        <p className="advice dim">
+          当前未配置模型 key，只能匹配情形库里的 {CASES.length} 类情形。配置后，任意描述都会由模型
+          在法规要点范围内给出研判。
+        </p>
+      )}
+
+      <p className="risk">
+        <b>注意</b>
+        AI 生成内容只作研判参考，不能直接作为执法依据。援引条款以现行文本为准，处置决定由执法人员作出。
+        需要时请补充：对方国籍、具体行为、是否持有证件、有无人员受伤、现场能否沟通。
       </p>
     </article>
   );

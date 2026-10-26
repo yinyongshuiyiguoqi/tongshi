@@ -430,6 +430,14 @@ textarea {
   border-left-color: var(--danger);
 }
 
+.ai-card {
+  border-left-color: rgba(154, 123, 255, 0.8);
+}
+
+.advice.dim {
+  color: var(--muted);
+}
+
 .card-head {
   display: flex;
   align-items: flex-start;

@@ -1,4 +1,4 @@
-import { provisionById, type CaseItem } from '../data/cases';
+import { PROVISIONS, provisionById, type CaseItem } from '../data/cases';
 
 /**
  * 大模型接入层。
@@ -57,6 +57,44 @@ export function buildMessages(item: CaseItem, input: string): ChatMessage[] {
       ].join('\n'),
     },
   ];
+}
+
+/**
+ * 情形库没有命中时的兜底。
+ *
+ * 注意这里仍然把法规库整体喂进去：模型只能在这些条目范围内说话，
+ * 不允许凭空生成法名、条号、数额。输出在界面上标为「未经情形库校验」。
+ */
+export function buildGeneralMessages(input: string): ChatMessage[] {
+  const basis = PROVISIONS.map(
+    (p) => `- ${p.law}${p.article}（${p.topic}）：${p.summary}`,
+  ).join('\n');
+
+  return [
+    {
+      role: 'system',
+      content: [
+        '你是涉外执法现场辅助系统，服务对象是基层民警。',
+        '情形库没有匹配到本次描述，请依据下面给出的法规要点，给出处置思路。',
+        '顺序是：先判断这件事的性质，再说现场该做什么，最后指出还需要核实哪些事实。',
+        '不超过 150 字，不分点，不用“首先、其次、最后”这类套话。',
+        '严禁编造法规名称、条号、罚款数额、期限；给出的依据只能来自下列条目。',
+        '如果这些条目不足以支撑判断，就直接说明需要补充核验什么，不要硬答。',
+      ].join(''),
+    },
+    {
+      role: 'user',
+      content: [`民警描述：${input}`, '', '可援引的法规要点：', basis, '', '请给出研判。'].join('\n'),
+    },
+  ];
+}
+
+export async function streamGeneral(
+  input: string,
+  onDelta: (text: string) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  return streamChat(buildGeneralMessages(input), onDelta, signal);
 }
 
 export async function streamAnalyse(
