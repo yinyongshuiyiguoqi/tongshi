@@ -3,7 +3,8 @@ import { CASES } from '../data/cases';
 import { clearRecent, loadRecent } from '../lib/history';
 import { loadEnterSend, saveEnterSend } from '../lib/prefs';
 import type { Session } from '../lib/session';
-import { PHOTOS, PRESETS, photoUrl, type BackdropSetting } from './Backdrop';
+import { PHOTOS, photoUrl, type BackdropSetting } from './Backdrop';
+import { SwitchRow } from './SwitchRow';
 
 /* ───────── 情形库 ───────── */
 
@@ -173,15 +174,6 @@ export function Profile({
               <span>{p.label}</span>
             </button>
           ))}
-          {PRESETS.map((p) => (
-            <button
-              key={p.kind}
-              className={`bg-swatch sw-${p.kind}${backdrop.kind === p.kind ? ' is-on' : ''}`}
-              onClick={() => onBackdrop({ kind: p.kind })}
-            >
-              <span>{p.label}</span>
-            </button>
-          ))}
           <label className={`bg-swatch sw-upload${backdrop.kind === 'custom' ? ' is-on' : ''}`}>
             <input type="file" accept="image/*" hidden onChange={pickFile} />
             <span>{backdrop.kind === 'custom' ? '已上传照片' : '上传照片'}</span>
@@ -191,20 +183,16 @@ export function Profile({
 
       <section className="bg-section">
         <h3>输入</h3>
-        <label className="pref-row">
-          <span>
-            <b>回车直接发送</b>
-            <em>
-              {enterSend
-                ? '现在回车就提交，Shift + Enter 换行'
-                : '现在用 Ctrl + Enter 提交，回车换行'}
-            </em>
-          </span>
-          <span className="switch">
-            <input type="checkbox" checked={enterSend} onChange={(e) => toggleEnter(e.target.checked)} />
-            <span />
-          </span>
-        </label>
+        <SwitchRow
+          checked={enterSend}
+          onChange={toggleEnter}
+          title="回车直接发送"
+          hint={
+            enterSend
+              ? '现在回车就提交，Shift + Enter 换行'
+              : '现在用 Ctrl + Enter 提交，回车换行'
+          }
+        />
       </section>
 
       <dl className="profile-list">

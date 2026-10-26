@@ -55,7 +55,7 @@ export default function App() {
   return (
     <>
       <Backdrop setting={backdrop} />
-      <div className={`aurora${backdrop.kind !== 'none' ? ' is-dim' : ''}`} aria-hidden="true">
+      <div className="aurora is-dim" aria-hidden="true">
         <span className="a1" />
         <span className="a2" />
         <span className="a3" />
