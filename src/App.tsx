@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Login } from './components/Login';
 import { Workbench } from './components/Workbench';
 import { Backdrop, loadBackdrop, saveBackdrop, type BackdropSetting } from './components/Backdrop';
@@ -22,6 +22,11 @@ export default function App() {
     saveBackdrop(next);
     setBackdrop(next);
   }
+
+  // 把当前场景挂到 <html> 上，CSS 据此决定高光从哪个方向打过来
+  useEffect(() => {
+    document.documentElement.dataset.bg = backdrop.kind;
+  }, [backdrop.kind]);
 
   return (
     <>

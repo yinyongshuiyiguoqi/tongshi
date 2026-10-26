@@ -84,7 +84,7 @@ export function Dock({ value, onChange }: { value: TabKey; onChange: (k: TabKey)
   useEffect(() => {
     const el = hostRef.current;
     if (!el) return;
-    const glass = new LiquidGlass(el, { tint: 0.85, tintTone: 'dark', frost: 0.7, radius: 30 });
+    const glass = new LiquidGlass(el, { tint: 0.55, tintTone: 'dark', frost: 0.55, radius: 30 });
     return () => glass.destroy();
   }, []);
 
