@@ -64,6 +64,9 @@ interface Box {
   w: number;
 }
 
+/** 选中胶囊往内收几个像素，四边留出呼吸空间，不贴着外框圆角 */
+const INSET = 4;
+
 type LensPhase = 'idle' | 'stretch' | 'settle';
 
 export function Dock({ value, onChange }: { value: TabKey; onChange: (k: TabKey) => void }) {
@@ -84,7 +87,8 @@ export function Dock({ value, onChange }: { value: TabKey; onChange: (k: TabKey)
   useEffect(() => {
     const el = hostRef.current;
     if (!el) return;
-    const glass = new LiquidGlass(el, { tint: 0.55, tintTone: 'dark', frost: 0.55, radius: 30 });
+    // tint 高一点、frost 低一点：玻璃跟着背景的明暗走，保留折射，别糊成一片奶白
+    const glass = new LiquidGlass(el, { tint: 0.72, tintTone: 'dark', frost: 0.32, radius: 30 });
     return () => glass.destroy();
   }, []);
 
@@ -92,19 +96,32 @@ export function Dock({ value, onChange }: { value: TabKey; onChange: (k: TabKey)
     const host = hostRef.current;
     if (!host) return;
     const hr = host.getBoundingClientRect();
+    // 胶囊是相对内容盒定位的，扣掉外框那道 1px 边框，左右内缩才对得齐
+    const border = host.clientLeft;
     setBoxes(
       itemRefs.current.map((el) => {
         if (!el) return { x: 0, w: 0 };
         const r = el.getBoundingClientRect();
-        return { x: r.left - hr.left, w: r.width };
+        return { x: r.left - hr.left - border, w: r.width };
       }),
     );
   }, []);
 
   useLayoutEffect(() => {
     measure();
+
     window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
+    // 中文字体晚到、页面缩放、滚动条出现都会改变项宽，光靠 resize 会错位
+    document.fonts?.ready.then(measure).catch(() => {});
+
+    const ro = new ResizeObserver(() => measure());
+    if (hostRef.current) ro.observe(hostRef.current);
+    itemRefs.current.forEach((el) => el && ro.observe(el));
+
+    return () => {
+      window.removeEventListener('resize', measure);
+      ro.disconnect();
+    };
   }, [measure]);
 
   const activeIndex = Math.max(
@@ -213,13 +230,13 @@ export function Dock({ value, onChange }: { value: TabKey; onChange: (k: TabKey)
 
   const style = dragging
     ? {
-        transform: `translateX(${dragX}px) scale(${1 + stretch}, ${1 - stretch * 0.45})`,
-        width: boxes[activeIndex]?.w ?? 0,
+        transform: `translateX(${Math.round(dragX + INSET)}px) scale(${1 + stretch}, ${1 - stretch * 0.45})`,
+        width: Math.max(0, (boxes[activeIndex]?.w ?? 0) - INSET * 2),
         transition: 'none',
       }
     : {
-        transform: `translateX(${lens.x}px)`,
-        width: lens.w || undefined,
+        transform: `translateX(${Math.round(lens.x + INSET)}px)`,
+        width: lens.w ? Math.max(0, Math.round(lens.w) - INSET * 2) : undefined,
         transition: `transform ${duration}ms ${easing}, width ${duration}ms ${easing}`,
       };
 
