@@ -2204,8 +2204,8 @@ select option:checked {
   padding: 7px;
   border-radius: 30px;
   border: 1px solid rgba(255, 255, 255, 0.07);
-  /* 压一层很淡的暗底，玻璃才不会比画面其他部分亮 */
-  background: rgba(10, 14, 20, 0.2);
+  /* 玻璃自己会折射背景，这里只在 WebGL 不可用时兜个底 */
+  background: rgba(10, 14, 20, 0.04);
   box-shadow: 0 24px 60px -26px rgba(0, 0, 0, 0.95);
   user-select: none;
   touch-action: none;
@@ -2221,22 +2221,7 @@ select option:checked {
   pointer-events: none;
 }
 
-/* 只压很薄一层，用来保证白字可读；压多了就和背景脱开了 */
-.dock::after {
-  content: '';
-  position: absolute;
-  inset: 1px;
-  border-radius: 29px;
-  /* 几乎不加色，只在文字那一行留一点点，托住白字 */
-  background: linear-gradient(
-    180deg,
-    rgba(5, 8, 12, 0.02) 0%,
-    rgba(5, 8, 12, 0.07) 72%,
-    rgba(5, 8, 12, 0.11) 100%
-  );
-  pointer-events: none;
-  z-index: 0;
-}
+/* 不再往玻璃上盖暗色膜：盖了就看不到折射，只剩一块塑料。 */
 
 /* 会跟着手指走的那块玻璃 */
 
@@ -2282,8 +2267,14 @@ select option:checked {
   border-radius: 24px;
   font-size: 10.5px;
   letter-spacing: 0.02em;
-  color: rgba(232, 238, 250, 0.68);
+  color: rgba(240, 245, 253, 0.9);
+  /* 玻璃不再压暗，可读性由投影兜住 */
+  text-shadow: 0 1px 4px rgba(0, 0, 0, 0.55);
   transition: color 0.25s var(--ease), transform 0.18s var(--ease);
+}
+
+.dock-item svg {
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.5));
 }
 
 .dock-item:hover {

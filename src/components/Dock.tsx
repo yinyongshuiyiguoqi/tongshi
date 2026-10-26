@@ -110,12 +110,12 @@ export function Dock({ value, onChange }: { value: TabKey; onChange: (k: TabKey)
     const glass = new LiquidGlass(el, {
       // tint 压到很低，让底下的真实画面透上来，亮度自然跟着背景走；
       // tintTone 交给 auto，亮背景偏亮、暗背景偏暗，而不是一块固定的灰。
-      // 目标：底栏几乎看不出来是一块板子，背景从玻璃里透上来，只有文字浮着。
-      // 染色压得很低，可读性交给文字投影。
-      tint: 0.14,
+      // 液态玻璃的材料参数：染色只用来压住一点杂色，真正的体积感来自折射。
+      // 滑杆往右走，雾化加重、折射减弱，就是液态 → 毛玻璃的那条线。
+      tint: 0.12 + frost * 0.18,
       tintTone: 'dark',
       frost,
-      material: { refraction: 108 - frost * 88 },
+      material: { refraction: 104 - frost * 76 },
       radius: 30,
     });
     return () => glass.destroy();
