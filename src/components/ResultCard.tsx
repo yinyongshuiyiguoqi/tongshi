@@ -1,17 +1,22 @@
 import { useState } from 'react';
 import { provisionById } from '../data/cases';
 import type { MatchResult } from '../lib/match';
+import { CaseBrief } from './CaseBrief';
 
 export function ResultCard({
   result,
   matches,
   low,
   onPick,
+  input,
+  token,
 }: {
   result: MatchResult;
   matches: MatchResult[];
   low: boolean;
   onPick: (id: string) => void;
+  input: string;
+  token: string;
 }) {
   const { item, score, hits } = result;
   const [toast, setToast] = useState('');
@@ -85,10 +90,7 @@ export function ResultCard({
         )}
       </header>
 
-      <section className="r-block">
-        <h2>现场判断。</h2>
-        <p className="r-lead">{item.brief}</p>
-      </section>
+      <CaseBrief item={item} input={input} token={token} />
 
       <section className="r-block">
         <h2>处置流程。</h2>

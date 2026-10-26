@@ -188,6 +188,8 @@ export function Workbench({
                 matches={matches}
                 low={lowConfidence}
                 onPick={(id) => setActiveId(id)}
+                input={query}
+                token={session.token}
               />
             )}
           </section>

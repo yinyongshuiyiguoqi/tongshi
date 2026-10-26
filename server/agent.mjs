@@ -252,6 +252,7 @@ const SYSTEM = [
 ].join('\n');
 
 async function runAgent(input, emit) {
+  const allArticles = [];
   const messages = [
     { role: 'system', content: SYSTEM },
     { role: 'user', content: input },
@@ -299,6 +300,7 @@ async function runAgent(input, emit) {
 
       emit({ type: 'step', name: '检索法规', detail: query });
       const { articles, mock, local, fallback, reason } = await searchLaw(query);
+      allArticles.push(...articles);
       emit({ type: 'tool', name: 'search_law', query, articles, mock, local, fallback, reason });
 
       messages.push({
@@ -316,14 +318,130 @@ async function runAgent(input, emit) {
   }
 
   emit({ type: 'step', name: '组织研判' });
-  await chatStream(messages, (text) => emit({ type: 'delta', text }));
+  let out = '';
+  await chatStream(messages, (text) => {
+    out += text;
+    emit({ type: 'delta', text });
+  });
+
+  const bad = unmatchedCitations(out, allArticles);
+  if (bad.length) emit({ type: 'verify', unmatched: bad });
+  emit({ type: 'done', mock: false });
+}
+
+// ── 依据校验 ────────────────────────────────────────────────
+// 模型答完再看一眼：它引用的《法》条号，是不是真在本次检索结果里。
+// 不在的标出来交给民警人工核，而不是假装没看见。
+const CN_NUM = { 零: 0, 〇: 0, 一: 1, 二: 2, 三: 3, 四: 4, 五: 5, 六: 6, 七: 7, 八: 8, 九: 9, 十: 10, 百: 100 };
+
+function artNum(s) {
+  const t = String(s || '').replace(/[第条\s]/g, '');
+  if (/^\d+$/.test(t)) return Number(t);
+  let total = 0;
+  let cur = 0;
+  for (const ch of t) {
+    const v = CN_NUM[ch];
+    if (v === undefined) continue;
+    if (v === 10) cur = (cur || 1) * 10;
+    else if (v === 100) {
+      total += (cur || 1) * 100;
+      cur = 0;
+    } else cur += v;
+  }
+  return total + cur;
+}
+
+const normLaw = (s) =>
+  String(s || '')
+    .replace(/[（(][^）)]*[）)]/g, '')
+    .replace(/修正|修订|年版|中华人民共和国/g, '')
+    .trim();
+
+function unmatchedCitations(text, articles) {
+  const allowed = new Set(articles.map((a) => `${normLaw(a.law)}|${artNum(a.num)}`));
+  const found = [];
+  const re = /《([^》]{2,60})》\s*(第[一二三四五六七八九十百零〇\d]+条)/g;
+  let m;
+  while ((m = re.exec(text))) {
+    const key = `${normLaw(m[1])}|${artNum(m[2])}`;
+    if (!allowed.has(key)) found.push(`《${m[1]}》${m[2]}`);
+  }
+  return [...new Set(found)];
+}
+
+// ── 命中情形后的个性化研判 ──────────────────────────────────
+// 情形库给的是审定过的通用流程；这里让模型结合民警的原话，说清这次该抓什么。
+async function runBrief({ input, title, brief, steps, provisionIds = [] }, emit) {
+  const arts = provisionIds
+    .map((id) => STATUTES.find((s) => s.id === id))
+    .filter(Boolean)
+    .map((s) => ({
+      law: s.law,
+      num: s.article,
+      content: s.text || s.gist,
+      status: s.status,
+      level: s.level,
+    }));
+
+  emit({ type: 'step', name: '匹配情形库', detail: title });
+  emit({ type: 'tool', name: 'search_law', articles: arts, mock: false, local: !LAW_KEY });
+
+  if (!LLM_KEY) {
+    const text = brief || '';
+    for (const ch of text) emit({ type: 'delta', text: ch });
+    emit({ type: 'done', mock: true });
+    return;
+  }
+
+  const sys = [
+    '你是涉外执法现场辅助系统，服务对象是基层民警。',
+    '下面给出的是系统已匹配到的情形和人工审定的处置流程，以及对应的现行条文。',
+    '你的任务不是复述流程，而是结合民警的原话，指出这一次现场该抓的重点、容易出错的地方。',
+    '规则：',
+    '1. 只能依据给出的条文说话，不得编造法规名称、条号、罚款数额、期限；',
+    '2. 不要重复“先表明身份、出示证件”这类流程里已经写明的步骤；',
+    '3. 不超过 120 字，不分点编号，不用“首先、其次、最后”这类套话；',
+    '4. 信息不全时按已知信息给方向，末尾一句话说明还需核实什么。',
+  ].join('\n');
+
+  const ctx = [
+    `民警描述：${input}`,
+    `匹配情形：${title}`,
+    `审定要点：${brief}`,
+    `处置流程：${steps.map((s, i) => `${i + 1}. ${s}`).join(' ')}`,
+    `可用条文：${arts.map((a) => `《${a.law}》${a.num}：${a.content}`).join('\n')}`,
+  ].join('\n');
+
+  emit({ type: 'step', name: '研判现场重点' });
+
+  let out = '';
+  await chatStream(
+    [
+      { role: 'system', content: sys },
+      { role: 'user', content: ctx },
+    ],
+    (t) => {
+      out += t;
+      emit({ type: 'delta', text: t });
+    },
+  );
+
+  const bad = unmatchedCitations(out, arts);
+  if (bad.length) emit({ type: 'verify', unmatched: bad });
   emit({ type: 'done', mock: false });
 }
 
 // ── 登录与会话 ──────────────────────────────────────────────
 // 演示账号写在服务端，前端拿不到；令牌用 HMAC 签名，带 12 小时有效期。
-const SECRET = process.env.SESSION_SECRET || 'tongshi-demo-secret-change-me';
+const DEFAULT_SECRET = 'tongshi-demo-secret-change-me';
+const SECRET = process.env.SESSION_SECRET || DEFAULT_SECRET;
 const TTL = 12 * 3600 * 1000;
+
+// 默认密钥只能用于本机演示；部署到公网必须另配，否则谁都能伪造令牌
+if (SECRET === DEFAULT_SECRET && process.env.NODE_ENV === 'production') {
+  console.error('拒绝启动：线上必须设置 SESSION_SECRET 环境变量。');
+  process.exit(1);
+}
 
 const ACCOUNTS = {
   100234: { password: 'tongshi', name: '宋定宜', unit: '派出所' },
@@ -355,13 +473,83 @@ function verifyToken(token) {
 }
 
 // ── HTTP ────────────────────────────────────────────────────
+const MAX_BODY = 64 * 1024;
+const HITS = new Map();
+
+/** 简易限流：按 IP + 路径计数，窗口过期自动清理 */
+function tooMany(ip, route, max, windowMs) {
+  const key = `${ip}|${route}`;
+  const now = Date.now();
+  const arr = (HITS.get(key) || []).filter((t) => now - t < windowMs);
+  arr.push(now);
+  if (HITS.size > 5000) HITS.clear();
+  HITS.set(key, arr);
+  return arr.length > max;
+}
+
+async function readBody(req) {
+  const chunks = [];
+  let size = 0;
+  for await (const c of req) {
+    size += c.length;
+    if (size > MAX_BODY) throw new Error('body too large');
+    chunks.push(c);
+  }
+  return Buffer.concat(chunks).toString('utf8');
+}
+
+// 线上部署时前端与接口同源：dist 由这里一并托管，省掉一层反向代理
+const DIST = path.join(ROOT, 'dist');
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json; charset=utf-8',
+  '.svg': 'image/svg+xml',
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.webp': 'image/webp',
+  '.ico': 'image/x-icon',
+  '.woff2': 'font/woff2',
+};
+
+function serveStatic(req, res) {
+  if (!existsSync(DIST)) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('前端还没构建，先执行 npm run build');
+    return;
+  }
+  let p = decodeURIComponent((req.url || '/').split('?')[0]);
+  if (p === '/' || p === '') p = '/index.html';
+  const file = path.join(DIST, p.replace(/^[/\\]+/, ''));
+  if (!file.startsWith(DIST) || !existsSync(file)) {
+    res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    res.end('not found');
+    return;
+  }
+  res.writeHead(200, {
+    'Content-Type': MIME[path.extname(file).toLowerCase()] || 'application/octet-stream',
+  });
+  res.end(readFileSync(file));
+}
+
 const server = http.createServer(async (req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
 
   if (req.method === 'OPTIONS') {
     res.writeHead(204).end();
+    return;
+  }
+
+  const ip = req.socket.remoteAddress || 'unknown';
+
+  if ((req.url || '').startsWith('/api/')) {
+    // 接口路径，继续往下走
+  } else if (req.method === 'GET' || req.method === 'HEAD') {
+    serveStatic(req, res);
     return;
   }
 
@@ -380,9 +568,20 @@ const server = http.createServer(async (req, res) => {
   }
 
   let raw = '';
-  for await (const chunk of req) raw += chunk;
+  try {
+    raw = await readBody(req);
+  } catch {
+    res.writeHead(413, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ message: '请求体过大' }));
+    return;
+  }
 
   if (req.url === '/api/login' && req.method === 'POST') {
+    if (tooMany(ip, 'login', 20, 60_000)) {
+      res.writeHead(429, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ message: '尝试过于频繁，请稍后再试' }));
+      return;
+    }
     let badge = '';
     let password = '';
     try {
@@ -406,11 +605,6 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (req.url !== '/api/analyse' || req.method !== 'POST') {
-    res.writeHead(404).end('not found');
-    return;
-  }
-
   const auth = String(req.headers.authorization || '');
   const payload = verifyToken(auth.startsWith('Bearer ') ? auth.slice(7) : '');
   if (!payload) {
@@ -419,11 +613,33 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  let input = '';
+  if (req.url !== '/api/analyse' && req.url !== '/api/brief') {
+    res.writeHead(404).end('not found');
+    return;
+  }
+  if (req.method !== 'POST') {
+    res.writeHead(405).end('method not allowed');
+    return;
+  }
+  if (tooMany(ip, 'analyse', 40, 60_000)) {
+    res.writeHead(429, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ message: '请求过于频繁，请稍后再试' }));
+    return;
+  }
+
+  let body = {};
   try {
-    input = String(JSON.parse(raw).input || '').slice(0, 1000);
+    body = JSON.parse(raw);
   } catch {
     res.writeHead(400).end('bad json');
+    return;
+  }
+
+  const isBrief = req.url === '/api/brief';
+  const input = String(body.input || '').slice(0, 1000);
+  if (!input) {
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ message: '缺少现场描述' }));
     return;
   }
 
@@ -436,7 +652,22 @@ const server = http.createServer(async (req, res) => {
   const emit = (event) => res.write(`data: ${JSON.stringify(event)}\n\n`);
 
   try {
-    await runAgent(input, emit);
+    if (isBrief) {
+      await runBrief(
+        {
+          input,
+          title: String(body.title || '').slice(0, 60),
+          brief: String(body.brief || '').slice(0, 400),
+          steps: Array.isArray(body.steps) ? body.steps.slice(0, 8).map((s) => String(s).slice(0, 200)) : [],
+          provisionIds: Array.isArray(body.provisionIds)
+            ? body.provisionIds.slice(0, 6).map((s) => String(s))
+            : [],
+        },
+        emit,
+      );
+    } else {
+      await runAgent(input, emit);
+    }
   } catch (err) {
     emit({ type: 'error', message: String(err?.message || err) });
   }

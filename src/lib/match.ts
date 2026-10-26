@@ -38,7 +38,10 @@ export interface MatchResult {
   hits: { w: string; weight: number }[];
 }
 
-export const LOW_CONFIDENCE = 0.4;
+export const LOW_CONFIDENCE = 0.5;
+
+/** 低于这个分不进结果卡——宁可交给 Agent，也不要给一条不像的依据 */
+export const MATCH_FLOOR = 0.25;
 
 export function matchCases(input: string, list: CaseItem[], limit = 3): MatchResult[] {
   const text = normalize(input);
@@ -66,8 +69,8 @@ export function matchCases(input: string, list: CaseItem[], limit = 3): MatchRes
   });
 
   return results
-    .filter((r) => r.score >= 0.12)
-    .filter((r) => r.hits.length > 0 || r.score >= 0.3)
+    .filter((r) => r.score >= MATCH_FLOOR)
+    .filter((r) => r.hits.length > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
 }
