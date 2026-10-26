@@ -1,144 +1,212 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { SCENARIOS, findScenario, provisionsOf } from './data/scenarios';
-import { buildMessages, hasLLM, streamChat } from './lib/ai';
+import { CASES, provisionById, type CaseItem } from './data/cases';
+import { LOW_CONFIDENCE, matchCases, type MatchResult } from './lib/match';
+import { hasLLM, streamAnalyse } from './lib/ai';
 
-const STEPS = ['语音转写', '语种识别', '身份核验', '法规检索', '生成建议'];
+const SESSION_KEY = 'tongshi.session';
 
-type Phase = 'idle' | 'running' | 'done';
+interface Session {
+  badge: string;
+  name: string;
+  unit: string;
+}
+
+const EXAMPLES = [
+  '小区门口一个外国人拿不出护照，只会说英语，问他来干什么也说不清',
+  '有个老外住在朋友家一个多星期了，一直没去派出所登记住宿',
+  '酒吧门口两个外国人喝多了在闹事，其中一个躺在地上起不来',
+];
+
+function readSession(): Session | null {
+  try {
+    const raw = localStorage.getItem(SESSION_KEY);
+    return raw ? (JSON.parse(raw) as Session) : null;
+  } catch {
+    return null;
+  }
+}
 
 export default function App() {
-  const [scenarioId, setScenarioId] = useState(SCENARIOS[0].id);
-  const [phase, setPhase] = useState<Phase>('idle');
-  const [tick, setTick] = useState(0);
-  const [typed, setTyped] = useState('');
-  const [summaryText, setSummaryText] = useState('');
-  const [summaryDone, setSummaryDone] = useState(false);
-  const streamStarted = useRef(false);
-  const abortRef = useRef<AbortController | null>(null);
-  const [recording, setRecording] = useState(false);
-  const [audioReady, setAudioReady] = useState(false);
-  const [photo, setPhoto] = useState<{ name: string; url: string } | null>(null);
-  const [draft, setDraft] = useState('');
+  const [session, setSession] = useState<Session | null>(readSession);
+
+  function login(s: Session) {
+    localStorage.setItem(SESSION_KEY, JSON.stringify(s));
+    setSession(s);
+  }
+
+  function logout() {
+    localStorage.removeItem(SESSION_KEY);
+    setSession(null);
+  }
+
+  return session ? <Workbench session={session} onLogout={logout} /> : <Login onLogin={login} />;
+}
+
+/* ───────────────────────── 登录 ───────────────────────── */
+
+function Login({ onLogin }: { onLogin: (s: Session) => void }) {
+  const [badge, setBadge] = useState('');
+  const [name, setName] = useState('');
+  const [unit, setUnit] = useState('派出所');
+  const [error, setError] = useState('');
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!/^\d{4,}$/.test(badge.trim())) {
+      setError('请输入有效的警号（4 位以上数字）');
+      return;
+    }
+    if (!name.trim()) {
+      setError('请输入姓名');
+      return;
+    }
+    onLogin({ badge: badge.trim(), name: name.trim(), unit });
+  }
+
+  return (
+    <div className="login">
+      <form className="login-card" onSubmit={submit}>
+        <div className="login-brand">
+          <span className="mark">通事</span>
+          <span className="latin">TONGSHI</span>
+        </div>
+        <p className="login-sub">涉外执法现场辅助 · 内部工作台</p>
+
+        <label className="field">
+          <span>警号</span>
+          <input
+            value={badge}
+            onChange={(e) => {
+              setBadge(e.target.value);
+              setError('');
+            }}
+            placeholder="如 100234"
+            inputMode="numeric"
+            autoFocus
+          />
+        </label>
+
+        <label className="field">
+          <span>姓名</span>
+          <input
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value);
+              setError('');
+            }}
+            placeholder="请输入姓名"
+          />
+        </label>
+
+        <label className="field">
+          <span>单位</span>
+          <select value={unit} onChange={(e) => setUnit(e.target.value)}>
+            <option>派出所</option>
+            <option>巡特警</option>
+            <option>出入境管理部门</option>
+            <option>治安管理部门</option>
+          </select>
+        </label>
+
+        {error && <p className="login-error">{error}</p>}
+
+        <button className="primary" type="submit">
+          进入工作台
+        </button>
+
+        <p className="login-hint">
+          演示环境不校验账密，警号填任意 4 位以上数字即可。正式版对接公安内网统一认证。
+        </p>
+      </form>
+    </div>
+  );
+}
+
+/* ───────────────────────── 工作台 ───────────────────────── */
+
+function Workbench({ session, onLogout }: { session: Session; onLogout: () => void }) {
+  const [input, setInput] = useState('');
+  const [query, setQuery] = useState('');
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [listening, setListening] = useState(false);
+  const [speechOk, setSpeechOk] = useState(false);
   const [toast, setToast] = useState('');
-  const toastTimer = useRef<number | undefined>(undefined);
+  const recog = useRef<any>(null);
+  const resultRef = useRef<HTMLElement>(null);
 
-  const scenario = findScenario(scenarioId);
-  const provisions = useMemo(() => provisionsOf(scenario.provisionIds), [scenario]);
+  const matches = useMemo(() => (query ? matchCases(query, CASES) : []), [query]);
+  const top = matches[0];
+  const active: MatchResult | undefined =
+    matches.find((m) => m.item.id === activeId) ?? top;
+  const lowConfidence = !active || active.score < LOW_CONFIDENCE;
 
-  const fallbackSummary = `${scenario.identity.detail}。匹配 ${provisions.length} 条依据，建议按下列要点处置。`;
+  useEffect(() => {
+    const w = window as any;
+    const Ctor = w.SpeechRecognition || w.webkitSpeechRecognition;
+    if (Ctor) {
+      const r = new Ctor();
+      r.lang = 'zh-CN';
+      r.continuous = false;
+      r.interimResults = false;
+      r.onresult = (e: any) => {
+        const text = Array.from(e.results)
+          .map((x: any) => x[0].transcript)
+          .join('');
+        setInput((v) => (v ? v + '，' + text : text));
+      };
+      r.onend = () => setListening(false);
+      r.onerror = () => setListening(false);
+      recog.current = r;
+      setSpeechOk(true);
+    }
+  }, []);
+
+  function toggleSpeech() {
+    if (!recog.current) return;
+    if (listening) {
+      recog.current.stop();
+      setListening(false);
+    } else {
+      try {
+        recog.current.start();
+        setListening(true);
+      } catch {
+        setListening(false);
+      }
+    }
+  }
+
+  function analyse() {
+    if (input.trim().length < 4) {
+      setToast('请先描述现场情况，至少输入一句话');
+      return;
+    }
+    setQuery(input.trim());
+    setActiveId(null);
+
+    // 窄屏下输入区占满一屏，查完自动把结果带进来
+    if (window.innerWidth < 1000) {
+      window.setTimeout(
+        () => resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+        60,
+      );
+    }
+  }
+
+  function reset() {
+    setQuery('');
+    setActiveId(null);
+    setInput('');
+  }
 
   function flash(msg: string) {
     setToast(msg);
-    window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToast(''), 2200);
+    window.setTimeout(() => setToast(''), 2000);
   }
 
-  // 场景切换时重置
-  useEffect(() => {
-    abortRef.current?.abort();
-    setPhase('idle');
-    setTick(0);
-    setTyped('');
-    setSummaryText('');
-    setSummaryDone(false);
-    streamStarted.current = false;
-    setAudioReady(false);
-    setPhoto(null);
-    setDraft(scenario.transcript);
-  }, [scenario]);
-
-  // 主流程推进
-  useEffect(() => {
-    if (phase !== 'running') return;
-    if (tick >= STEPS.length) {
-      setPhase('done');
-      return;
-    }
-    const id = window.setTimeout(() => setTick((t) => t + 1), 820);
-    return () => window.clearTimeout(id);
-  }, [phase, tick]);
-
-  // 转写文本逐字出现（模拟流式）
-  useEffect(() => {
-    if (tick < 1) {
-      setTyped('');
-      return;
-    }
-    if (typed.length >= scenario.transcript.length) return;
-    const id = window.setTimeout(
-      () => setTyped(scenario.transcript.slice(0, typed.length + 2)),
-      18,
-    );
-    return () => window.clearTimeout(id);
-  }, [tick, typed, scenario]);
-
-  // 结论：配了 key 就走真实模型流式输出，没配就在本地逐字模拟
-  useEffect(() => {
-    if (tick < 4) return;
-    if (streamStarted.current) return;
-    streamStarted.current = true;
-
-    if (hasLLM) {
-      const ac = new AbortController();
-      abortRef.current = ac;
-      streamChat(
-        buildMessages(scenario, provisions),
-        (d) => setSummaryText((t) => t + d),
-        ac.signal,
-      )
-        .then(() => setSummaryDone(true))
-        .catch((err) => {
-          if (ac.signal.aborted) return;
-          console.warn('模型调用失败，回落到本地文本：', err);
-          setSummaryText(fallbackSummary);
-          setSummaryDone(true);
-        });
-      return;
-    }
-
-    let i = 0;
-    const id = window.setInterval(() => {
-      i += 2;
-      setSummaryText(fallbackSummary.slice(0, i));
-      if (i >= fallbackSummary.length) {
-        window.clearInterval(id);
-        setSummaryDone(true);
-      }
-    }, 26);
-    return () => window.clearInterval(id);
-  }, [tick, scenario, provisions, fallbackSummary]);
-
-  useEffect(() => () => abortRef.current?.abort(), []);
-
-  function start() {
-    if (phase === 'running') return;
-    abortRef.current?.abort();
-    streamStarted.current = false;
-    setTick(0);
-    setTyped('');
-    setSummaryText('');
-    setSummaryDone(false);
-    setPhase('running');
-  }
-
-  function startRecording() {
-    setRecording(true);
-    setAudioReady(false);
-    window.setTimeout(() => {
-      setRecording(false);
-      setAudioReady(true);
-      flash('录音已就绪（12.4 秒）');
-    }, 2000);
-  }
-
-  function onPhoto(e: React.ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0];
-    if (!f) return;
-    setPhoto({ name: f.name, url: URL.createObjectURL(f) });
-  }
-
-  async function copyScript() {
-    const text = scenario.lines.map((l) => `${l.zh}\n${l.en}`).join('\n\n');
+  async function copyScripts() {
+    if (!active) return;
+    const text = active.item.scripts.map((s) => s.zh).join('\n');
     try {
       await navigator.clipboard.writeText(text);
       flash('话术已复制');
@@ -147,42 +215,16 @@ export default function App() {
     }
   }
 
-  function exportRecord() {
-    const lines = [
-      '涉外执法现场处置记录（草稿）',
-      `场景：${scenario.title}`,
-      `地点：${scenario.place}`,
-      `语言：${scenario.lang.name}（置信度 ${scenario.lang.confidence}）`,
-      '',
-      '【转写】',
-      scenario.transcript,
-      scenario.translated,
-      '',
-      '【核验】',
-      scenario.identity.detail,
-      '',
-      '【处置要点】',
-      ...scenario.points.map((p, i) => `${i + 1}. ${p}`),
-      '',
-      '【示范话术】',
-      ...scenario.lines.map((l) => `${l.zh}\n${l.en}`),
-      '',
-      '【依据】',
-      ...provisions.map((p) => `${p.law}${p.article}（${p.topic}）`),
-      '',
-      '本记录由原型生成，条文要点待核对原文。',
-    ];
-    const blob = new Blob([lines.join('\n')], { type: 'text/plain;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `处置记录-${scenario.id}.txt`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-    flash('记录已导出');
-  }
-
-  const stepState = (i: number) =>
-    tick > i ? 'done' : tick === i && phase === 'running' ? 'active' : 'idle';
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        analyse();
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
 
   return (
     <div className="app">
@@ -191,200 +233,273 @@ export default function App() {
           <span className="mark">通事</span>
           <span className="latin">TONGSHI</span>
         </div>
-        <p className="sub">涉外执法现场助手</p>
+        <span className="divider" />
+        <span className="sub">涉外执法现场辅助</span>
         <div className="top-right">
-          <span className="badge">{hasLLM ? '已接入模型' : '演示模式'}</span>
-          <span className="mode">{hasLLM ? '流式输出 · 已启用' : 'Mock AI · 未接模型'}</span>
+          <span className="user">
+            {session.name} · {session.unit} · {session.badge}
+          </span>
+          <button className="ghost-btn" onClick={onLogout}>
+            退出
+          </button>
         </div>
       </header>
 
-      <main className="grid">
-        {/* 左：输入 */}
-        <section className="panel">
-          <h2>现场输入</h2>
-          <div className="chips">
-            {SCENARIOS.map((s) => (
+      <main className="work">
+        <section className="compose">
+          <h2>现场情况</h2>
+          <p className="hint-line">
+            用平时的说法描述就行，不用套格式。时间、地点、国籍、对方说了什么，知道多少写多少。
+          </p>
+
+          <textarea
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            placeholder="例如：小区门口一个外国人拿不出护照，只会说英语……"
+            rows={7}
+            spellCheck={false}
+          />
+
+          <div className="compose-actions">
+            {speechOk && (
+              <button className={`mic${listening ? ' is-rec' : ''}`} onClick={toggleSpeech}>
+                {listening ? '正在听…' : '语音输入'}
+              </button>
+            )}
+            <button className="primary" onClick={analyse}>
+              查找处置方案
+            </button>
+            {query && (
+              <button className="ghost-btn" onClick={reset}>
+                清空
+              </button>
+            )}
+          </div>
+          <p className="kbd-tip">Ctrl + Enter 提交</p>
+
+          <div className="examples">
+            <span className="label">试试这些</span>
+            {EXAMPLES.map((ex, i) => (
               <button
-                key={s.id}
-                className={`chip${s.id === scenarioId ? ' is-on' : ''}`}
-                onClick={() => setScenarioId(s.id)}
+                key={i}
+                className="example"
+                onClick={() => {
+                  setInput(ex);
+                  setQuery('');
+                  setActiveId(null);
+                }}
               >
-                {s.chip}
+                {ex}
               </button>
             ))}
           </div>
-
-          <p className="scene">{scenario.title}</p>
-          <p className="place">{scenario.place}</p>
-
-          <div className="input-group">
-            <span className="label">语音</span>
-            <button
-              className={`mic${recording ? ' is-rec' : ''}`}
-              onClick={startRecording}
-              disabled={recording}
-            >
-              {recording ? '录制中…' : audioReady ? '已录制 12.4 秒 · 重录' : '按一下开始录音'}
-            </button>
-          </div>
-
-          <div className="input-group">
-            <span className="label">证件</span>
-            <label className="upload">
-              <input type="file" accept="image/*" onChange={onPhoto} hidden />
-              {photo ? '已选：' + photo.name : '上传护照或居留证件照片'}
-            </label>
-            {photo && <img className="thumb" src={photo.url} alt="证件预览" />}
-          </div>
-
-          <div className="input-group">
-            <span className="label">文本</span>
-            <textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              rows={4}
-              spellCheck={false}
-            />
-          </div>
-
-          <button className="primary" onClick={start} disabled={phase === 'running'}>
-            {phase === 'running' ? '处理中…' : phase === 'done' ? '重新处理' : '开始处理'}
-          </button>
         </section>
 
-        {/* 中：链路 */}
-        <section className="panel flow">
-          <h2>处理链路</h2>
-          <ol className="steps">
-            {STEPS.map((s, i) => (
-              <li key={s} className={`step is-${stepState(i)}`}>
-                <span className="dot" />
-                <span className="step-name">{s}</span>
-                <span className="step-value">
-                  {tick > i ? stepValue(i, scenario, provisions.length) : '—'}
-                </span>
-              </li>
-            ))}
-          </ol>
+        <section className="result" ref={resultRef}>
+          {!query && <Empty />}
 
-          <h3>转写</h3>
-          <p className="transcript">
-            {typed || (phase === 'idle' ? '等待输入…' : '')}
-            {tick >= 1 && typed.length < scenario.transcript.length && <span className="caret" />}
-          </p>
-
-          {tick >= 2 && (
-            <>
-              <h3>译文</h3>
-              <p className="translated">{scenario.translated}</p>
-            </>
-          )}
-
-          {tick >= 3 && (
-            <div className="verify">
-              <span className={`pill ${scenario.identity.status === '已核验' ? 'ok' : 'warn'}`}>
-                {scenario.identity.status}
-              </span>
-              <span>{scenario.identity.detail}</span>
+          {query && matches.length === 0 && (
+            <div className="no-match">
+              <h2>没有匹配到明确情形</h2>
+              <p>
+                系统没有在情形库里找到足够接近的条目。可以补充这些信息再试：对方国籍、具体行为、
+                是否持有证件、有没有人受伤、现场能否沟通。
+              </p>
+              <p className="hint-line">仍然无法判断的，按现行程序上报，不要凭系统结果处理。</p>
             </div>
           )}
-        </section>
 
-        {/* 右：建议 */}
-        <section className="panel advice">
-          <h2>处置建议</h2>
-
-          {tick < 4 ? (
-            <div className="empty">
-              <p className="empty-title">尚未生成</p>
-              <p className="empty-hint">
-                开始处理后，这里会给出处置判断、动作要点、可直接照念的双语话术，以及每条判断背后的依据。
-              </p>
-            </div>
-          ) : (
+          {query && active && (
             <>
-              <p className="summary">
-                {summaryText}
-                {!summaryDone && <span className="caret" />}
-              </p>
+              <ResultCard
+                result={active}
+                low={lowConfidence}
+                input={query}
+                onCopy={copyScripts}
+                onPick={(id) => setActiveId(id)}
+              />
 
-              <h3>要点</h3>
-              <ul className="points">
-                {scenario.points.map((p, i) => (
-                  <li
-                    key={i}
-                    className={phase === 'done' ? 'in' : ''}
-                    style={{ transitionDelay: `${i * 90}ms` }}
-                  >
-                    <span className="num">{String(i + 1).padStart(2, '0')}</span>
-                    {p}
-                  </li>
-                ))}
-              </ul>
-
-              {phase === 'done' && (
-                <>
-                  <h3>示范话术</h3>
-                  <div className="lines">
-                    {scenario.lines.map((l, i) => (
-                      <div key={i} className="line in" style={{ transitionDelay: `${i * 120}ms` }}>
-                        <p className="zh">{l.zh}</p>
-                        <p className="en">{l.en}</p>
-                      </div>
-                    ))}
-                  </div>
-                </>
+              {matches.length > 1 && (
+                <div className="others">
+                  <span className="label">其他可能情形</span>
+                  {matches.map((m) => (
+                    <button
+                      key={m.item.id}
+                      className={`other${m.item.id === active.item.id ? ' is-on' : ''}`}
+                      onClick={() => setActiveId(m.item.id)}
+                    >
+                      <span className="other-title">{m.item.title}</span>
+                      <span className="other-score">{Math.round(m.score * 100)}%</span>
+                    </button>
+                  ))}
+                </div>
               )}
-
-              <h3>依据（要点摘录）</h3>
-              <ul className="provisions">
-                {provisions.map((p) => (
-                  <li key={p.id}>
-                    <p className="p-law">
-                      {p.law}
-                      <span> {p.article}</span>
-                    </p>
-                    <p className="p-topic">{p.topic}</p>
-                    <p className="p-sum">{p.summary}</p>
-                  </li>
-                ))}
-              </ul>
             </>
           )}
-
-          <div className="actions">
-            <button onClick={copyScript} disabled={tick < 4}>
-              复制话术
-            </button>
-            <button onClick={exportRecord} disabled={tick < 4}>
-              导出记录
-            </button>
-          </div>
-
-          <p className="caution">{scenario.caution}</p>
         </section>
       </main>
-
-      <footer className="foot">
-        条文要点为演示数据，非条文原文；正式提交前须逐条核对现行法规。AI 输出仅供参考，处置决定由执法人员作出。
-      </footer>
 
       {toast && <div className="toast">{toast}</div>}
     </div>
   );
 }
 
-function stepValue(i: number, s: { lang: { name: string; confidence: number } }, n: number) {
-  switch (i) {
-    case 0:
-      return '12.4 秒';
-    case 1:
-      return `${s.lang.name} · ${s.lang.confidence.toFixed(2)}`;
-    case 2:
-      return '核对证件与停留事由';
-    case 3:
-      return `命中 ${n} 条`;
-    default:
-      return '3 条要点 · 2 段话术';
-  }
+/* ───────────────────────── 结果卡 ───────────────────────── */
+
+function ResultCard({
+  result,
+  low,
+  input,
+  onCopy,
+  onPick,
+}: {
+  result: MatchResult;
+  low: boolean;
+  input: string;
+  onCopy: () => void;
+  onPick: (id: string) => void;
+}) {
+  const { item, score, hits } = result;
+  const [advice, setAdvice] = useState('');
+  const [adviceDone, setAdviceDone] = useState(false);
+
+  useEffect(() => {
+    setAdvice('');
+    setAdviceDone(false);
+    let cancelled = false;
+
+    const fallback = item.brief;
+
+    if (!hasLLM) {
+      setAdvice(fallback);
+      setAdviceDone(true);
+      return;
+    }
+
+    const ac = new AbortController();
+    streamAnalyse(item, input, (d) => {
+      if (!cancelled) setAdvice((t) => t + d);
+    }, ac.signal)
+      .then(() => !cancelled && setAdviceDone(true))
+      .catch(() => {
+        if (cancelled) return;
+        setAdvice(fallback);
+        setAdviceDone(true);
+      });
+
+    return () => {
+      cancelled = true;
+      ac.abort();
+    };
+  }, [item, input]);
+
+  const provisions = item.provisionIds
+    .map((id) => provisionById(id))
+    .filter((p): p is NonNullable<typeof p> => Boolean(p));
+
+  return (
+    <article className={`card sev-${item.severity}`}>
+      <div className="card-head">
+        <div>
+          <span className="card-kicker">匹配结果</span>
+          <h2>{item.title}</h2>
+        </div>
+        <div className="score">
+          <span className="score-num">{Math.round(score * 100)}</span>
+          <span className="score-unit">%</span>
+        </div>
+      </div>
+
+      {low && (
+        <p className="low-warn">
+          匹配置信度偏低，请核对下方依据后再决定是否采用，必要时补充信息重新查找。
+        </p>
+      )}
+
+      <div className="hits">
+        <span className="label">命中</span>
+        {hits.slice(0, 6).map((h) => (
+          <span key={h.w} className="hit">
+            {h.w}
+          </span>
+        ))}
+        {hits.length === 0 && <span className="hit muted-tag">无关键词命中，仅形似</span>}
+      </div>
+
+      <h3>处置流程</h3>
+      <ol className="steps-list">
+        {item.steps.map((s, i) => (
+          <li key={i}>
+            <span className="step-no">{i + 1}</span>
+            <span>{s}</span>
+          </li>
+        ))}
+      </ol>
+
+      <h3>研判意见</h3>
+      <p className="advice">
+        {advice || <span className="hint">生成中…</span>}
+        {!adviceDone && advice && <span className="caret" />}
+      </p>
+
+      <h3>依据</h3>
+      <ul className="provisions">
+        {provisions.map((p) => (
+          <li key={p.id}>
+            <p className="p-law">
+              {p.law}
+              {p.article && <span> {p.article}</span>}
+            </p>
+            <p className="p-topic">{p.topic}</p>
+            <p className="p-sum">{p.summary}</p>
+          </li>
+        ))}
+      </ul>
+
+      <h3>现场话术</h3>
+      <div className="scripts">
+        {item.scripts.map((s, i) => (
+          <div key={i} className="script">
+            <p className="zh">{s.zh}</p>
+            {s.en && <p className="en">{s.en}</p>}
+          </div>
+        ))}
+      </div>
+
+      <div className="card-actions">
+        <button onClick={onCopy}>复制话术</button>
+      </div>
+
+      <p className="risk">
+        <b>注意</b>
+        {item.risk}
+      </p>
+
+      <p className="followup">
+        <b>还需要确认</b>
+        {item.followUp}
+      </p>
+    </article>
+  );
+}
+
+function Empty() {
+  return (
+    <div className="empty">
+      <h2>等待描述现场情况</h2>
+      <p>
+        系统会在情形库里比对，找出最接近的一条，给出处置流程、法律依据和可以直接说出口的话术。
+      </p>
+      <div className="empty-cats">
+        <span className="label">库里现有 {CASES.length} 类情形</span>
+        <div className="cat-list">
+          {CASES.map((c) => (
+            <span key={c.id} className="cat">
+              {c.title}
+            </span>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }

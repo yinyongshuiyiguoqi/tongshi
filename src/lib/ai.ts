@@ -1,19 +1,19 @@
-import type { Provision, Scenario } from '../data/scenarios';
+import { provisionById, type CaseItem } from '../data/cases';
 
 /**
  * 大模型接入层。
  *
- * 现在默认走 Mock（没有配置 key 时）。拿到 key 后，在项目根目录建 `.env.local`：
+ * 默认走本地模板（未配置 key 时）。拿到 key 后在项目根目录建 `.env.local`：
  *
  *   VITE_LLM_BASE=https://api.deepseek.com
  *   VITE_LLM_KEY=sk-xxxx
  *   VITE_LLM_MODEL=deepseek-chat
  *
- * 接口按 OpenAI 兼容格式调用，DeepSeek、智谱、通义、Moonshot 都可以直接用。
+ * 接口按 OpenAI 兼容格式，DeepSeek、智谱、通义、Moonshot 都可直接替换。
  *
- * 安全提醒：前端直连会把 key 打进 bundle。比赛演示可以这样跑，但仓库必须
- * 只提交 `.env.example`，真 key 放本地 `.env.local` 并写进 .gitignore；
- * 正式上线要加一层后端代理（Next.js API Route 或 Vercel Edge Function）。
+ * 安全提醒：前端直连会把 key 打进 bundle，比赛演示可以这样跑。仓库只提交
+ * `.env.example`，真 key 放 `.env.local`（已进 .gitignore）；正式上线要加一层
+ * 后端代理，否则评审一查仓库就能看到。
  */
 
 const BASE = (import.meta.env.VITE_LLM_BASE as string | undefined) ?? 'https://api.deepseek.com';
@@ -24,9 +24,11 @@ export const hasLLM = Boolean(KEY);
 
 export type ChatMessage = { role: 'system' | 'user'; content: string };
 
-export function buildMessages(scenario: Scenario, provisions: Provision[]): ChatMessage[] {
-  const basis = provisions
-    .map((p) => `- ${p.law}${p.article}（${p.topic}）：${p.summary}`)
+export function buildMessages(item: CaseItem, input: string): ChatMessage[] {
+  const provisions = item.provisionIds
+    .map((id) => provisionById(id))
+    .filter(Boolean)
+    .map((p) => `- ${p!.law}${p!.article}（${p!.topic}）：${p!.summary}`)
     .join('\n');
 
   return [
@@ -34,28 +36,36 @@ export function buildMessages(scenario: Scenario, provisions: Provision[]): Chat
       role: 'system',
       content: [
         '你是涉外执法现场辅助系统，服务对象是基层民警。',
-        '只能依据给定的依据条目作答，不得自行补充法条、数额或期限。',
-        '用中文输出，先给一句判断，再说处置顺序，控制在 120 字以内。',
-        '不要使用“首先、其次、最后”这类套话，不要分点编号。',
-        '如果给出的依据不足以支撑结论，直接说明需要补充核验什么。',
+        '根据给定的情形条目与民警描述，给出一到两句研判意见，点明现场首先要核实的关键事项。',
+        '不超过 80 字，不分点，不使用“首先、其次、最后”这类套话。',
+        '不得补充依据条目之外的法规、数额或期限；依据不足时直接说明需要补充核验什么。',
       ].join(''),
     },
     {
       role: 'user',
       content: [
-        `场景：${scenario.title}（${scenario.place}）`,
-        `对方语言：${scenario.lang.name}`,
-        `现场转写：${scenario.transcript}`,
-        `中文译文：${scenario.translated}`,
-        `已核验信息：${scenario.identity.detail}`,
+        `情形条目：${item.title}`,
+        `民警描述：${input}`,
         '',
-        '可援引的依据：',
-        basis,
+        '处置流程：',
+        ...item.steps.map((s, i) => `${i + 1}. ${s}`),
         '',
-        '请给出处置判断。',
+        '可援引依据：',
+        provisions,
+        '',
+        '请给出研判意见。',
       ].join('\n'),
     },
   ];
+}
+
+export async function streamAnalyse(
+  item: CaseItem,
+  input: string,
+  onDelta: (text: string) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  return streamChat(buildMessages(item, input), onDelta, signal);
 }
 
 /** 流式调用，逐段回调。失败时抛出，由调用方决定是否回落到本地文本。 */
@@ -70,12 +80,7 @@ export async function streamChat(
       'Content-Type': 'application/json',
       Authorization: `Bearer ${KEY}`,
     },
-    body: JSON.stringify({
-      model: MODEL,
-      messages,
-      stream: true,
-      temperature: 0.2,
-    }),
+    body: JSON.stringify({ model: MODEL, messages, stream: true, temperature: 0.2 }),
     signal,
   });
 
