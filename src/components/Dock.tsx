@@ -115,7 +115,7 @@ export function Dock({ value, onChange }: { value: TabKey; onChange: (k: TabKey)
       tint: 0.12 + frost * 0.18,
       tintTone: 'dark',
       frost,
-      material: { refraction: 104 - frost * 76 },
+      material: { refraction: 110 - frost * 82 },
       radius: 30,
     });
     return () => glass.destroy();
