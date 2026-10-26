@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { LiquidGlass } from 'apple-liquid-glass-webgl';
-import { loadDockTint, onPrefsChange } from '../lib/prefs';
+import { loadDockFrost, onPrefsChange } from '../lib/prefs';
 
 export type TabKey = 'query' | 'cases' | 'history' | 'profile';
 
@@ -86,28 +86,36 @@ export function Dock({ value, onChange }: { value: TabKey; onChange: (k: TabKey)
   const lensRef = useRef<{ x: number; w: number }>({ x: 0, w: 0 });
   const settled = useRef(false);
 
-  const [tint, setTint] = useState(loadDockTint);
-  const tintTimer = useRef<number | undefined>(undefined);
+  const [frost, setFrost] = useState(loadDockFrost);
+  const frostTimer = useRef<number | undefined>(undefined);
 
   useEffect(
     () =>
       onPrefsChange(() => {
         // 拖动滑杆会连续触发，攒一下再重建玻璃，避免反复创建 WebGL 上下文
-        window.clearTimeout(tintTimer.current);
-        tintTimer.current = window.setTimeout(() => setTint(loadDockTint()), 160);
+        window.clearTimeout(frostTimer.current);
+        frostTimer.current = window.setTimeout(() => setFrost(loadDockFrost()), 160);
       }),
     [],
   );
 
-  useEffect(() => () => window.clearTimeout(tintTimer.current), []);
+  useEffect(() => () => window.clearTimeout(frostTimer.current), []);
 
   useEffect(() => {
     const el = hostRef.current;
     if (!el) return;
-    // tint 高一点、frost 低一点：玻璃跟着背景的明暗走，保留折射，别糊成一片奶白
-    const glass = new LiquidGlass(el, { tint, tintTone: 'dark', frost: 0.32, radius: 30 });
+
+    // 液态玻璃和毛玻璃的区别在「折射」和「雾化」：
+    // frost 越大越糊，同时把折射压下去，否则两侧手感还是同一种玻璃。
+    const glass = new LiquidGlass(el, {
+      tint: 0.55 + frost * 0.15,
+      tintTone: 'dark',
+      frost,
+      material: { refraction: 108 - frost * 88 },
+      radius: 30,
+    });
     return () => glass.destroy();
-  }, [tint]);
+  }, [frost]);
 
   const measure = useCallback(() => {
     const host = hostRef.current;
@@ -263,7 +271,7 @@ export function Dock({ value, onChange }: { value: TabKey; onChange: (k: TabKey)
       ref={hostRef}
       aria-label="主导航"
       onPointerDown={onPointerDown}
-      style={{ '--dock-alpha': (0.32 - tint * 0.22).toFixed(2) } as CSSProperties}
+      style={{ '--dock-frost': frost.toFixed(2) } as CSSProperties}
     >
       <span className={`dock-lens${dragging ? ' is-drag' : ''}`} style={style} aria-hidden="true" />
       {ITEMS.map((it, i) => (

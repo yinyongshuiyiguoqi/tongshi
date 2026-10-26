@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { CASES } from '../data/cases';
 import { clearRecent, loadRecent } from '../lib/history';
-import { loadDockTint, loadEnterSend, saveDockTint, saveEnterSend } from '../lib/prefs';
+import {
+  DOCK_FROST_MAX,
+  loadDockFrost,
+  loadEnterSend,
+  saveDockFrost,
+  saveEnterSend,
+} from '../lib/prefs';
 import { loadVoiceId, saveVoiceId, speak, VOICE_PRESETS } from '../lib/speech';
 import type { Session } from '../lib/session';
 import { PHOTOS, photoUrl, type BackdropSetting } from './Backdrop';
@@ -119,7 +125,7 @@ export function Profile({
   const [model, setModel] = useState<string | null | undefined>(undefined);
   const [enterSend, setEnterSend] = useState(loadEnterSend);
   const [voice, setVoice] = useState(loadVoiceId);
-  const [dockTint, setDockTint] = useState(loadDockTint);
+  const [dockFrost, setDockFrost] = useState(loadDockFrost);
 
   function toggleEnter(on: boolean) {
     setEnterSend(on);
@@ -207,25 +213,28 @@ export function Profile({
         <h3>外观</h3>
         <div className="pref-row is-static">
           <div className="pref-text">
-            <b>底栏透明度</b>
-            <em>往右拉更通透，让背景从底栏里透出来；往左拉更厚重，字更清楚</em>
+            <b>底栏质感</b>
+            <em>往左是液态玻璃，边缘会折射背景；往右变毛玻璃，糊成一片柔光</em>
           </div>
-          <span className="pref-val">{Math.round(((1 - dockTint) / 0.85) * 100)}%</span>
+          <span className="pref-val">
+            {dockFrost < 0.3 ? '液态' : dockFrost < 0.62 ? '介于两者' : '毛玻璃'}
+          </span>
           <input
             className="ios-range"
             type="range"
             min={0}
             max={100}
             step={1}
-            value={Math.round(((1 - dockTint) / 0.85) * 100)}
-            aria-label="底栏透明度"
+            value={Math.round((dockFrost / DOCK_FROST_MAX) * 100)}
+            aria-label="底栏质感"
             onChange={(e) => {
-              const pct = Number(e.target.value);
-              const next = 1 - (pct / 100) * 0.85;
-              setDockTint(next);
-              saveDockTint(next);
+              const next = (Number(e.target.value) / 100) * DOCK_FROST_MAX;
+              setDockFrost(next);
+              saveDockFrost(next);
             }}
-            style={{ ['--fill' as string]: `${Math.round(((1 - dockTint) / 0.85) * 100)}%` }}
+            style={{
+              ['--fill' as string]: `${Math.round((dockFrost / DOCK_FROST_MAX) * 100)}%`,
+            }}
           />
         </div>
       </section>

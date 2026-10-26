@@ -2204,8 +2204,8 @@ select option:checked {
   padding: 7px;
   border-radius: 30px;
   border: 1px solid rgba(255, 255, 255, 0.16);
-  /* 压一层很淡的暗底，玻璃才不会比画面其他部分亮；浓度由个人中心调节 */
-  background: rgba(10, 14, 20, var(--dock-alpha, 0.2));
+  /* 压一层很淡的暗底，玻璃才不会比画面其他部分亮 */
+  background: rgba(10, 14, 20, 0.2);
   box-shadow: 0 24px 60px -26px rgba(0, 0, 0, 0.95);
   user-select: none;
   touch-action: none;
@@ -2235,8 +2235,9 @@ select option:checked {
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.22),
     0 6px 18px -12px rgba(0, 0, 0, 0.7);
-  backdrop-filter: blur(6px) saturate(150%);
-  -webkit-backdrop-filter: blur(6px) saturate(150%);
+  /* 选中胶囊跟着质感走：液态时几乎不糊，毛玻璃时糊得明显 */
+  backdrop-filter: blur(calc(1px + var(--dock-frost, 0.28) * 16px)) saturate(150%);
+  -webkit-backdrop-filter: blur(calc(1px + var(--dock-frost, 0.28) * 16px)) saturate(150%);
   pointer-events: none;
   transition:
     transform 0.42s cubic-bezier(0.22, 1, 0.36, 1),
