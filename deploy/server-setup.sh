@@ -14,8 +14,13 @@ set -euo pipefail
 DOMAIN="${1:-}"
 if [ -z "$DOMAIN" ]; then
   echo "用法: bash server-setup.sh 你的域名"
-  echo "例如: bash server-setup.sh tongshi.xyz"
+  echo "      bash server-setup.sh none      # 先不配域名，用 IP:8787 验证"
   exit 1
+fi
+
+SKIP_CADDY=0
+if [ "$DOMAIN" = "none" ]; then
+  SKIP_CADDY=1
 fi
 
 APP_DIR=/srv/tongshi
@@ -41,16 +46,18 @@ if ! command -v node >/dev/null 2>&1; then
 fi
 echo "    node $(node -v)"
 
-if ! command -v caddy >/dev/null 2>&1; then
-  echo "==> 安装 Caddy"
-  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
-    | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
-  curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
-    > /etc/apt/sources.list.d/caddy-stable.list
-  apt-get update -qq
-  apt-get install -y -qq caddy >/dev/null
+if [ "$SKIP_CADDY" = "0" ]; then
+  if ! command -v caddy >/dev/null 2>&1; then
+    echo "==> 安装 Caddy"
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' \
+      | gpg --dearmor -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg
+    curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' \
+      > /etc/apt/sources.list.d/caddy-stable.list
+    apt-get update -qq
+    apt-get install -y -qq caddy >/dev/null
+  fi
+  echo "    caddy $(caddy version | head -1)"
 fi
-echo "    caddy $(caddy version | head -1)"
 
 echo "==> 建运行用户与目录"
 id -u tongshi >/dev/null 2>&1 || useradd -r -s /usr/sbin/nologin tongshi
@@ -101,6 +108,20 @@ systemctl is-active --quiet tongshi && echo "    服务已启动" || {
   echo "服务没起来，看日志：journalctl -u tongshi -n 40 --no-pager"
   exit 1
 }
+
+if [ "$SKIP_CADDY" = "1" ]; then
+  echo "==> 跳过域名与 HTTPS（先用 IP:8787 验证）"
+  echo ""
+  echo "==> 本机自检"
+  curl -s http://127.0.0.1:8787/api/health || echo "（接口没响应，看日志）"
+  echo ""
+  echo ""
+  echo "完成。下一步："
+  echo "  1. 编辑 $APP_DIR/.env 填 LLM_API_KEY / LAW_API_KEY，然后 systemctl restart tongshi"
+  echo "  2. 轻量控制台防火墙放行 8787"
+  echo "  3. 浏览器打开 http://<公网IP>:8787"
+  exit 0
+fi
 
 echo "==> 配置 Caddy 反代 + 自动 HTTPS"
 mkdir -p /etc/caddy
