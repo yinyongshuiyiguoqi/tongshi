@@ -44,11 +44,34 @@ const LLM_KEY = (process.env.LLM_API_KEY || process.env.VITE_LLM_KEY || '').trim
 const LLM_BASE = (process.env.LLM_BASE || 'https://api.deepseek.com').replace(/\/$/, '');
 const LLM_MODEL = process.env.LLM_MODEL || 'deepseek-chat';
 
-// ── 工具：元典法条检索 ──────────────────────────────────────
+// ── 工具：法条检索 ──────────────────────────────────────────
+// 先取本地审定库（准、免费），再用元典补覆盖面（全，但向量召回噪声大）。
+// 合并时本地在前，在线结果按与查询的字面重合度过滤一次，去掉明显跑题的。
+//
 // 元典出任何问题（key 过期、积分不足、网络不通、接口改版）都不让它拖垮整条链路：
-// 记一条日志，退回本地法条库，前端会看到「在线检索失败，已回退本地库」。
+// 记一条日志，只返回本地结果，前端会看到「在线检索失败，已回退本地库」。
+
+function bigrams(s) {
+  const t = String(s || '').replace(/[\s，。、；：,.;:!?！？（）()【】《》""'']/g, '');
+  const out = new Set();
+  for (let i = 0; i < t.length - 1; i++) out.add(t.slice(i, i + 2));
+  return out;
+}
+
+/** 与查询的字面重合度，用来剔除向量召回里明显不相关的结果 */
+function overlap(queryGrams, text) {
+  if (!queryGrams.size) return 1;
+  const g = bigrams(text);
+  let hit = 0;
+  queryGrams.forEach((x) => {
+    if (g.has(x)) hit++;
+  });
+  return hit / queryGrams.size;
+}
+
 async function searchLaw(query, limit = 6) {
-  if (!LAW_KEY) return localSearch(query, Math.min(limit, 4));
+  const local = localSearch(query, 4);
+  if (!LAW_KEY) return local;
 
   try {
     const res = await fetch('https://open.chineselaw.com/open/law_vector_search', {
@@ -69,26 +92,46 @@ async function searchLaw(query, limit = 6) {
 
     if (!res.ok) throw new Error(`元典返回 HTTP ${res.status}`);
     const json = await res.json();
-    if (json?.code !== 200) throw new Error(json?.msg || `元典业务码 ${json?.code}`);
+    // 元典成功时业务码是 201（不是 200），2xx 一律按成功处理
+    const code = Number(json?.code);
+    if (!(code >= 200 && code < 300)) throw new Error(json?.msg || `元典业务码 ${json?.code}`);
 
     const list = json?.extra?.fatiao ?? [];
     if (!list.length) throw new Error('元典未命中任何条文');
 
-    return {
-      mock: false,
-      local: false,
-      articles: list.slice(0, limit).map((f) => ({
+    const qGrams = bigrams(query);
+    // 「治安管理处罚法」与「治安管理处罚法(2025修订)」是同一部法，去重前先抹平
+    const normLaw = (s) =>
+      String(s || '')
+        .replace(/[（(][^）)]*[）)]/g, '')
+        .replace(/修正|修订|年版/g, '')
+        .trim();
+    const seen = new Set(local.articles.map((a) => `${normLaw(a.law)}|${a.num}`));
+
+    const online = list
+      .map((f) => ({
         id: String(f.ftid ?? ''),
         law: Array.isArray(f.fgtitle) ? f.fgtitle[0] : f.fgtitle,
         num: f.num ?? '',
         content: (f.content ?? '').replace(/\s+/g, ' ').slice(0, 300),
         status: f.sxx ?? '',
         level: f.effect1 ?? '',
-      })),
+      }))
+      .filter((a) => !seen.has(`${normLaw(a.law)}|${a.num}`))
+      .map((a) => ({ a, s: overlap(qGrams, `${a.law} ${a.content}`) }))
+      .filter((x) => x.s >= 0.22)
+      .sort((x, y) => y.s - x.s)
+      .slice(0, 2)
+      .map((x) => x.a);
+
+    return {
+      mock: false,
+      local: online.length === 0,
+      articles: [...local.articles, ...online].slice(0, limit),
     };
   } catch (err) {
     console.warn(`[law] 在线检索失败，回退本地库：${err?.message || err}`);
-    return { ...localSearch(query, Math.min(limit, 4)), fallback: true, reason: String(err?.message || err) };
+    return { ...local, fallback: true, reason: String(err?.message || err) };
   }
 }
 
@@ -101,9 +144,10 @@ function localSearch(query, limit = 4) {
     for (const k of s.keywords) if (q.includes(k)) hit += 1 + k.length / 4;
     let shared = 0;
     for (const ch of new Set(q)) if (s.topic.includes(ch)) shared += 0.2;
-    return { s, score: hit * 2 + shared };
+    return { s, hit, score: hit * 2 + shared };
   })
-    .filter((x) => x.score > 0)
+    // 必须命中至少一个关键词——只靠主题字面重合会把不相干的条文带进来
+    .filter((x) => x.hit > 0)
     .sort((a, b) => b.score - a.score)
     .slice(0, limit);
 
@@ -239,9 +283,12 @@ async function runAgent(input, emit) {
   const msg = first?.choices?.[0]?.message ?? {};
 
   if (msg.tool_calls?.length) {
-    messages.push(msg);
+    // 模型有时一次发四五个检索请求；元典按次计费，只执行前两次，
+    // assistant 消息同步截断，否则 tool_calls 与 tool 回包对不上会报错。
+    const calls = msg.tool_calls.slice(0, 2);
+    messages.push({ ...msg, tool_calls: calls });
 
-    for (const call of msg.tool_calls) {
+    for (const call of calls) {
       let args = {};
       try {
         args = JSON.parse(call.function?.arguments || '{}');
