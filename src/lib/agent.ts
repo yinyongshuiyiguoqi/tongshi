@@ -18,6 +18,8 @@ export type AgentEvent =
       articles: LawArticle[];
       mock?: boolean;
       local?: boolean;
+      fallback?: boolean;
+      reason?: string;
     }
   | { type: 'delta'; text: string }
   | { type: 'done'; mock?: boolean }

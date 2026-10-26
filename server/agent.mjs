@@ -45,41 +45,51 @@ const LLM_BASE = (process.env.LLM_BASE || 'https://api.deepseek.com').replace(/\
 const LLM_MODEL = process.env.LLM_MODEL || 'deepseek-chat';
 
 // ── 工具：元典法条检索 ──────────────────────────────────────
+// 元典出任何问题（key 过期、积分不足、网络不通、接口改版）都不让它拖垮整条链路：
+// 记一条日志，退回本地法条库，前端会看到「在线检索失败，已回退本地库」。
 async function searchLaw(query, limit = 6) {
   if (!LAW_KEY) return localSearch(query, Math.min(limit, 4));
 
-  const res = await fetch('https://open.chineselaw.com/open/law_vector_search', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json; charset=utf-8',
-      Accept: 'application/json',
-      'X-API-Key': LAW_KEY,
-    },
-    body: JSON.stringify({
-      query,
-      rewrite_flag: true,
-      return_num: 18,
-      fatiao_filter: { sxx: ['现行有效'] },
-    }),
-    signal: AbortSignal.timeout(12000),
-  });
+  try {
+    const res = await fetch('https://open.chineselaw.com/open/law_vector_search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json; charset=utf-8',
+        Accept: 'application/json',
+        'X-API-Key': LAW_KEY,
+      },
+      body: JSON.stringify({
+        query,
+        rewrite_flag: true,
+        return_num: 18,
+        fatiao_filter: { sxx: ['现行有效'] },
+      }),
+      signal: AbortSignal.timeout(12000),
+    });
 
-  if (!res.ok) throw new Error(`元典 ${res.status}`);
-  const json = await res.json();
-  if (json?.code !== 200) throw new Error(json?.msg || '元典返回异常');
+    if (!res.ok) throw new Error(`元典返回 HTTP ${res.status}`);
+    const json = await res.json();
+    if (json?.code !== 200) throw new Error(json?.msg || `元典业务码 ${json?.code}`);
 
-  const list = json?.extra?.fatiao ?? [];
-  return {
-    mock: false,
-    articles: list.slice(0, limit).map((f) => ({
-      id: String(f.ftid ?? ''),
-      law: Array.isArray(f.fgtitle) ? f.fgtitle[0] : f.fgtitle,
-      num: f.num ?? '',
-      content: (f.content ?? '').replace(/\s+/g, ' ').slice(0, 300),
-      status: f.sxx ?? '',
-      level: f.effect1 ?? '',
-    })),
-  };
+    const list = json?.extra?.fatiao ?? [];
+    if (!list.length) throw new Error('元典未命中任何条文');
+
+    return {
+      mock: false,
+      local: false,
+      articles: list.slice(0, limit).map((f) => ({
+        id: String(f.ftid ?? ''),
+        law: Array.isArray(f.fgtitle) ? f.fgtitle[0] : f.fgtitle,
+        num: f.num ?? '',
+        content: (f.content ?? '').replace(/\s+/g, ' ').slice(0, 300),
+        status: f.sxx ?? '',
+        level: f.effect1 ?? '',
+      })),
+    };
+  } catch (err) {
+    console.warn(`[law] 在线检索失败，回退本地库：${err?.message || err}`);
+    return { ...localSearch(query, Math.min(limit, 4)), fallback: true, reason: String(err?.message || err) };
+  }
 }
 
 /** 本地法条检索：关键词命中为主，主题字面重合为辅 */
@@ -208,8 +218,8 @@ async function runAgent(input, emit) {
   if (!LLM_KEY) {
     // 无模型 key：仍然走一次真实检索，用模板组织回答，链路不空转
     emit({ type: 'step', name: '检索法规' });
-    const { articles, mock, local } = await searchLaw(input);
-    emit({ type: 'tool', name: 'search_law', articles, mock, local });
+    const { articles, mock, local, fallback, reason } = await searchLaw(input);
+    emit({ type: 'tool', name: 'search_law', articles, mock, local, fallback, reason });
     emit({ type: 'step', name: '组织研判' });
 
     const list = articles.map((a) => `《${a.law}》${a.num}`).join('、');
@@ -241,8 +251,8 @@ async function runAgent(input, emit) {
       const query = args.query || input;
 
       emit({ type: 'step', name: '检索法规', detail: query });
-      const { articles, mock, local } = await searchLaw(query);
-      emit({ type: 'tool', name: 'search_law', query, articles, mock, local });
+      const { articles, mock, local, fallback, reason } = await searchLaw(query);
+      emit({ type: 'tool', name: 'search_law', query, articles, mock, local, fallback, reason });
 
       messages.push({
         role: 'tool',

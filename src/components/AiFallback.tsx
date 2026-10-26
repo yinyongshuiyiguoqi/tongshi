@@ -11,6 +11,7 @@ export function AiFallback({ input, token }: { input: string; token: string }) {
   const [steps, setSteps] = useState<string[]>([]);
   const [viaAgent, setViaAgent] = useState(false);
   const [localLaw, setLocalLaw] = useState(false);
+  const [lawFallback, setLawFallback] = useState('');
   const [lawState, setLawState] = useState<'off' | 'ok' | 'error'>(
     hasLawApi ? 'ok' : 'off',
   );
@@ -22,6 +23,7 @@ export function AiFallback({ input, token }: { input: string; token: string }) {
     setSteps([]);
     setViaAgent(false);
     setLocalLaw(false);
+    setLawFallback('');
 
     let cancelled = false;
     const ac = new AbortController();
@@ -44,6 +46,7 @@ export function AiFallback({ input, token }: { input: string; token: string }) {
               case 'tool':
                 setArticles(e.articles);
                 setLocalLaw(Boolean(e.local));
+                setLawFallback(e.fallback ? e.reason || '在线检索不可用' : '');
                 break;
               case 'delta':
                 setText((t) => t + e.text);
@@ -132,7 +135,14 @@ export function AiFallback({ input, token }: { input: string; token: string }) {
         </ol>
       )}
 
-      {localLaw && articles.length > 0 && (
+      {lawFallback && (
+        <p className="low-warn">
+          在线法规检索失败（{lawFallback}），本次依据已回退本地法条库。请检查
+          LAW_API_KEY 或稍后重试。
+        </p>
+      )}
+
+      {localLaw && !lawFallback && articles.length > 0 && (
         <p className="advice dim">
           依据取自本地法条库，条文原文已对照国家法律法规数据库核验；配置法规检索
           key 后可扩展到全库检索。
