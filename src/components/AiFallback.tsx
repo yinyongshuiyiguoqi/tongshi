@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { CASES } from '../data/cases';
 import { runAgent, type AgentResult } from '../lib/agent';
 import { hasLawApi, searchLaw, type LawArticle } from '../lib/legal';
 import { hasLLM, streamGeneral } from '../lib/ai';
@@ -189,13 +188,7 @@ export function AiFallback({ input, token }: { input: string; token: string }) {
           </p>
           {done && <SpeakBar text={text} token={token} />}
         </>
-      ) : (
-        <p className="advice dim">
-          {articles.length > 0
-            ? `已检索到 ${articles.length} 条现行法条，但未配置模型 key，无法生成研判。`
-            : `当前未配置模型 key，只能匹配情形库里的 ${CASES.length} 类情形。配置后，任意描述都会由模型在检索到的法条范围内给出研判。`}
-        </p>
-      )}
+      ) : null}
 
       {lawState === 'error' && (
         <p className="low-warn">
