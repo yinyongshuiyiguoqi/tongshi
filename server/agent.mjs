@@ -120,12 +120,12 @@ const TOOLS = [
 ];
 
 // ── 模型调用 ────────────────────────────────────────────────
-async function chat(messages, { tools } = {}) {
+async function chat(messages, { tools, toolChoice } = {}) {
   const body = {
     model: LLM_MODEL,
     messages,
     temperature: 0.2,
-    ...(tools ? { tools, tool_choice: 'auto' } : {}),
+    ...(tools ? { tools, tool_choice: toolChoice || 'auto' } : {}),
   };
 
   const res = await fetch(`${LLM_BASE}/chat/completions`, {
@@ -178,7 +178,8 @@ const SYSTEM = [
   '你是涉外执法现场辅助系统，服务对象是基层民警。',
   '你可以调用 search_law 检索现行有效的中国法律条文。',
   '规则：',
-  '1. 涉及法律判断时，必须先调用 search_law，不要凭记忆回答；',
+  '1. 必须先调用 search_law 检索，拿到结果之后再作答，不要凭记忆回答；',
+  '1.1 不要向民警反问或要求补充材料。信息不全时，按已知信息给出方向，并在末尾一句话说明还需核实什么；',
   '2. 只能依据检索回来的条文作答，不得编造法规名称、条号、罚款数额、期限；',
   '3. 输出先给一句判断，再说现场处置顺序，最后指出还需核实的事实，不超过 180 字；',
   '4. 检索结果不足以支撑判断时，直接说明还缺什么信息；',
@@ -209,8 +210,11 @@ async function runAgent(input, emit) {
     return;
   }
 
-  // 第一轮：让模型决定要不要查、查什么
-  const first = await chat(messages, { tools: TOOLS });
+  // 第一轮：强制走一次检索，避免模型直接空谈
+  const first = await chat(messages, {
+    tools: TOOLS,
+    toolChoice: { type: 'function', function: { name: 'search_law' } },
+  });
   const msg = first?.choices?.[0]?.message ?? {};
 
   if (msg.tool_calls?.length) {

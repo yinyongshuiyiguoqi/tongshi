@@ -38,7 +38,7 @@ export interface MatchResult {
   hits: { w: string; weight: number }[];
 }
 
-export const LOW_CONFIDENCE = 0.3;
+export const LOW_CONFIDENCE = 0.4;
 
 export function matchCases(input: string, list: CaseItem[], limit = 3): MatchResult[] {
   const text = normalize(input);

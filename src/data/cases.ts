@@ -370,9 +370,9 @@ export const CASES: CaseItem[] = [
       { w: '丢东西', weight: 2 },
       { w: '手机丢', weight: 2 },
       { w: '丢了', weight: 2 },
-      { w: '语言不通', weight: 2 },
-      { w: '不会中文', weight: 2 },
-      { w: '不会说中文', weight: 2 },
+      { w: '语言不通', weight: 1 },
+      { w: '不会中文', weight: 1 },
+      { w: '不会说中文', weight: 1 },
       { w: '问路', weight: 2 },
       { w: '需要帮助', weight: 2 },
       { w: '需要帮忙', weight: 2 },
@@ -433,6 +433,44 @@ export const CASES: CaseItem[] = [
     brief:
       '现场以救人、护场、核查为主，责任由交警认定。当场划责容易被理解为承诺，后面很难收回。',
     followUp: '是否有人受伤？车辆是否影响通行？对方是否持有有效驾驶证？',
+  },
+  {
+    id: 'c-theft',
+    title: '外籍人员涉嫌盗窃',
+    severity: '中',
+    scene:
+      '外籍人员在商场、超市等经营场所盗窃商品，被店员或保安发现并控制，涉案金额与次数尚不明确。',
+    keywords: [
+      { w: '偷东西', weight: 3 },
+      { w: '盗窃', weight: 3 },
+      { w: '偷窃', weight: 3 },
+      { w: '偷了', weight: 3 },
+      { w: '顺手牵羊', weight: 2 },
+      { w: '没付钱', weight: 2 },
+      { w: '未付款', weight: 2 },
+      { w: '商品', weight: 1 },
+      { w: '超市', weight: 1 },
+      { w: '保安', weight: 1 },
+      { w: '监控', weight: 1 },
+    ],
+    steps: [
+      '控制现场，确认涉案人员身份与是否携带证件',
+      '调取监控、清点涉案商品并估价，固定物证与证人陈述',
+      '按涉案金额与次数判断是治安案件还是刑事案件，分别受案',
+      '依法处理，视情通报出入境管理部门与当事人国籍国使领馆',
+    ],
+    provisionIds: ['p-za4', 'p-jc9'],
+    scripts: [
+      {
+        zh: '请您配合我们核实情况。商品和监控记录我们先固定下来，稍后需要您说明经过。',
+        en: "Please cooperate while we verify what happened. We'll preserve the goods and the CCTV footage, and you will be asked to explain what occurred.",
+      },
+    ],
+    risk:
+      '涉案金额与次数决定案件性质，未查清前不要定性。不得以语言不通为由拖延受案，也不得当场要求赔偿了事。',
+    brief:
+      '先固定证据，再谈定性。金额和次数决定走治安还是刑事，现场不要急于给结论。',
+    followUp: '涉案金额多少？是否多次？有没有人身冲突或已赔偿？',
   },
 ];
 
