@@ -5,6 +5,9 @@
 }
 
 :root {
+  /* 让浏览器自带的控件（下拉列表、滚动条）也用深色，不然白底浅字看不清 */
+  color-scheme: dark;
+
   --bg: #08090d;
   --panel: #0e1016;
   --panel-2: #12151d;
@@ -1606,9 +1609,20 @@ textarea {
   padding: 0 8px;
   border-radius: 9px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(18, 22, 29, 0.92);
   color: var(--ink);
   font-size: 12.5px;
+}
+
+/* 展开后的列表由系统绘制，单独给底色和字色，避免白底浅字 */
+select option {
+  background: #12161d;
+  color: #e9effc;
+}
+
+select option:checked {
+  background: #1d3a6b;
+  color: #fff;
 }
 
 .tr-swap {
