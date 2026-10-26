@@ -59,7 +59,7 @@ export function CaseBrief({ item, input, token }: { item: CaseItem; input: strin
   return (
     <section className="r-block r-brief">
       <div className="r-brief-head">
-        <h2>AI 研判。</h2>
+        <h2>AI 研判</h2>
         <span className="r-brief-tag">
           {state === 'run' ? '生成中' : `基于 ${lawCount} 条现行依据`}
         </span>

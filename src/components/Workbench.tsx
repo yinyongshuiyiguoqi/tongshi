@@ -135,7 +135,7 @@ export function Workbench({
       </header>
 
       {tab === 'query' && (
-        <main className="work">
+        <main className={`work${query ? '' : ' is-idle'}`}>
           <section className="compose">
             <h2>现场情况</h2>
             <p className="hint-line">

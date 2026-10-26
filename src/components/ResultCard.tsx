@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { provisionById } from '../data/cases';
 import type { MatchResult } from '../lib/match';
+import { canSpeak, speak, stopSpeaking, type SpeakLang } from '../lib/speech';
 import { CaseBrief } from './CaseBrief';
 
 export function ResultCard({
@@ -20,6 +21,30 @@ export function ResultCard({
 }) {
   const { item, score, hits } = result;
   const [toast, setToast] = useState('');
+  const [speaking, setSpeaking] = useState('');
+
+  useEffect(() => () => stopSpeaking(), []);
+
+  function toggleSpeak(text: string, lang: SpeakLang, key: string) {
+    if (speaking === key) {
+      stopSpeaking();
+      setSpeaking('');
+      return;
+    }
+    if (!speak(text, lang)) {
+      setToast('当前浏览器不支持语音播报');
+      window.setTimeout(() => setToast(''), 1800);
+      return;
+    }
+    setSpeaking(key);
+    // 播完自动复位
+    const check = window.setInterval(() => {
+      if (!window.speechSynthesis.speaking) {
+        setSpeaking('');
+        window.clearInterval(check);
+      }
+    }, 400);
+  }
 
   const provisions = item.provisionIds
     .map((id) => provisionById(id))
@@ -47,7 +72,7 @@ export function ResultCard({
         <span className="r-kicker">
           匹配结果 · {item.severity === '高' ? '高处置强度' : item.severity === '中' ? '中等处置强度' : '一般处置'}
         </span>
-        <h1>{item.title}。</h1>
+        <h1>{item.title}</h1>
         <p className="r-sub">
           匹配度 <b>{Math.round(score * 100)}%</b>
           {hits.length > 0 && (
@@ -93,7 +118,7 @@ export function ResultCard({
       <CaseBrief item={item} input={input} token={token} />
 
       <section className="r-block">
-        <h2>处置流程。</h2>
+        <h2>处置流程</h2>
         <ol className="r-steps">
           {item.steps.map((s, i) => (
             <li key={i}>
@@ -105,19 +130,37 @@ export function ResultCard({
       </section>
 
       <section className="r-block">
-        <h2>现场话术。</h2>
+        <h2>现场话术</h2>
         <div className="r-scripts">
           {item.scripts.map((s, i) => (
             <div key={i} className="r-script">
               <p className="r-zh">{s.zh}</p>
               {s.en && <p className="r-en">{s.en}</p>}
+              {canSpeak() && (
+                <div className="r-speak">
+                  <button
+                    className={speaking === `${i}-zh` ? 'is-on' : ''}
+                    onClick={() => toggleSpeak(s.zh, 'zh-CN', `${i}-zh`)}
+                  >
+                    {speaking === `${i}-zh` ? '停止' : '播报中文'}
+                  </button>
+                  {s.en && (
+                    <button
+                      className={speaking === `${i}-en` ? 'is-on' : ''}
+                      onClick={() => toggleSpeak(s.en as string, 'en-US', `${i}-en`)}
+                    >
+                      {speaking === `${i}-en` ? 'Stop' : 'Play English'}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           ))}
         </div>
       </section>
 
       <section className="r-block">
-        <h2>依据。</h2>
+        <h2>依据</h2>
         <ul className="r-laws">
           {provisions.map((p) => (
             <li key={p.id}>

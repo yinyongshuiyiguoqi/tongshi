@@ -1,7 +1,14 @@
 import { useEffect, useState } from 'react';
 import { Login } from './components/Login';
 import { Workbench } from './components/Workbench';
-import { Backdrop, loadBackdrop, saveBackdrop, type BackdropSetting } from './components/Backdrop';
+import {
+  Backdrop,
+  loadBackdrop,
+  nextBackdrop,
+  PHOTOS,
+  saveBackdrop,
+  type BackdropSetting,
+} from './components/Backdrop';
 import { clearSession, loadSession, saveSession, type Session } from './lib/session';
 
 export default function App() {
@@ -11,6 +18,13 @@ export default function App() {
   function handleLogin(s: Session) {
     saveSession(s);
     setSession(s);
+
+    // 每次登录换一张实景照片；自己上传的和纯色不动
+    setBackdrop((cur) => {
+      const next = nextBackdrop(cur);
+      saveBackdrop(next);
+      return next;
+    });
   }
 
   function handleLogout() {
@@ -25,8 +39,18 @@ export default function App() {
 
   // 把当前场景挂到 <html> 上，CSS 据此决定高光从哪个方向打过来
   useEffect(() => {
-    document.documentElement.dataset.bg = backdrop.kind;
-  }, [backdrop.kind]);
+    const root = document.documentElement;
+    root.dataset.bg = backdrop.kind;
+
+    const photo = PHOTOS[backdrop.photo ?? 0];
+    if (backdrop.kind === 'photo' && photo) {
+      root.style.setProperty('--light-x', photo.light.x);
+      root.style.setProperty('--light-y', photo.light.y);
+      root.style.setProperty('--light-rgb', photo.light.rgb);
+    } else {
+      ['--light-x', '--light-y', '--light-rgb'].forEach((k) => root.style.removeProperty(k));
+    }
+  }, [backdrop]);
 
   return (
     <>

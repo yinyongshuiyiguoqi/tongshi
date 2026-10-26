@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { CASES } from '../data/cases';
 import { clearRecent, loadRecent } from '../lib/history';
 import type { Session } from '../lib/session';
-import { PRESETS, type BackdropSetting } from './Backdrop';
+import { PHOTOS, PRESETS, photoUrl, type BackdropSetting } from './Backdrop';
 
 /* ───────── 情形库 ───────── */
 
@@ -20,7 +20,7 @@ export function CaseLibrary({ onPick }: { onPick: (text: string) => void }) {
   return (
     <div className="view">
       <header className="view-head">
-        <h1>情形库。</h1>
+        <h1>情形库</h1>
         <p>库里现有 {CASES.length} 类情况，点一条就能带进查询。</p>
         <input
           className="view-search"
@@ -64,7 +64,7 @@ export function HistoryView({ onPick }: { onPick: (text: string) => void }) {
   return (
     <div className="view">
       <header className="view-head">
-        <h1>记录。</h1>
+        <h1>记录</h1>
         <p>存在这台设备上，换设备不会同步。</p>
       </header>
 
@@ -137,7 +137,7 @@ export function Profile({
   return (
     <div className="view">
       <header className="view-head">
-        <h1>我的。</h1>
+        <h1>我的</h1>
       </header>
 
       <div className="profile-card">
@@ -152,8 +152,20 @@ export function Profile({
 
       <section className="bg-section">
         <h3>背景</h3>
-        <p className="bg-hint">选一张预设，或者用自己的照片。只存在本机。</p>
+        <p className="bg-hint">
+          五张实景按登录轮换，也可以固定一张，或者上传自己的照片。只存在本机。
+        </p>
         <div className="bg-grid">
+          {PHOTOS.map((p, i) => (
+            <button
+              key={p.file}
+              className={`bg-swatch is-photo${backdrop.kind === 'photo' && (backdrop.photo ?? 0) === i ? ' is-on' : ''}`}
+              style={{ backgroundImage: `url(${photoUrl(i)})` }}
+              onClick={() => onBackdrop({ kind: 'photo', photo: i })}
+            >
+              <span>{p.label}</span>
+            </button>
+          ))}
           {PRESETS.map((p) => (
             <button
               key={p.kind}
