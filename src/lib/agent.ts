@@ -93,3 +93,25 @@ export function runBrief(
 ): Promise<void> {
   return stream('/api/brief', ctx, token, onEvent, signal);
 }
+
+export interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface ChatContext {
+  title?: string;
+  brief?: string;
+  provisionIds?: string[];
+  history: ChatMessage[];
+}
+
+/** 在一条已出的结果上继续追问 */
+export function runChat(
+  ctx: ChatContext,
+  token: string,
+  onEvent: (e: AgentEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  return stream('/api/chat', ctx, token, onEvent, signal);
+}

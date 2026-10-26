@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { CASES } from '../data/cases';
 import { clearRecent, loadRecent } from '../lib/history';
+import { loadEnterSend, saveEnterSend } from '../lib/prefs';
 import type { Session } from '../lib/session';
 import { PHOTOS, PRESETS, photoUrl, type BackdropSetting } from './Backdrop';
 
@@ -114,6 +115,12 @@ export function Profile({
 }) {
   const { user } = session;
   const [model, setModel] = useState<string | null | undefined>(undefined);
+  const [enterSend, setEnterSend] = useState(loadEnterSend);
+
+  function toggleEnter(on: boolean) {
+    setEnterSend(on);
+    saveEnterSend(on);
+  }
 
   useEffect(() => {
     fetch('/api/health')
@@ -180,6 +187,24 @@ export function Profile({
             <span>{backdrop.kind === 'custom' ? '已上传照片' : '上传照片'}</span>
           </label>
         </div>
+      </section>
+
+      <section className="bg-section">
+        <h3>输入</h3>
+        <label className="pref-row">
+          <span>
+            <b>回车直接发送</b>
+            <em>
+              {enterSend
+                ? '现在回车就提交，Shift + Enter 换行'
+                : '现在用 Ctrl + Enter 提交，回车换行'}
+            </em>
+          </span>
+          <span className="switch">
+            <input type="checkbox" checked={enterSend} onChange={(e) => toggleEnter(e.target.checked)} />
+            <span />
+          </span>
+        </label>
       </section>
 
       <dl className="profile-list">

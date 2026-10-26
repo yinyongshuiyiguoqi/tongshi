@@ -431,6 +431,59 @@ async function runBrief({ input, title, brief, steps, provisionIds = [] }, emit)
   emit({ type: 'done', mock: false });
 }
 
+// ── 追问：在一条已出的结果上继续问 ──────────────────────────
+// 民警看完处置方案常常还有一句「那他要是不配合呢」。
+// 这里带着前面几轮对话和本案条文继续问模型，不给工具、不查库，避免跑题。
+async function runChat({ history = [], title = '', brief = '', provisionIds = [] }, emit) {
+  const arts = provisionIds
+    .map((id) => STATUTES.find((s) => s.id === id))
+    .filter(Boolean)
+    .map((s) => ({ law: s.law, num: s.article, content: s.text || s.gist }));
+
+  if (!LLM_KEY) {
+    const text = '还没有配置模型，追问功能暂时不能用。先看上面的处置流程和依据。';
+    for (const ch of text) emit({ type: 'delta', text: ch });
+    emit({ type: 'done', mock: true });
+    return;
+  }
+
+  const sys = [
+    '你是涉外执法现场辅助系统，正在就一条已经给出处置方案的情形回答民警的追问。',
+    title && `本轮情形：${title}`,
+    brief && `已给的研判：${brief}`,
+    arts.length ? `本案条文：${arts.map((a) => `《${a.law}》${a.num}：${a.content}`).join(' ')}` : '',
+    '规则：',
+    '1. 只依据上面的条文和已知信息回答，不得编造法规名称、条号、罚款数额、期限；',
+    '2. 不要重复上面已经给过的处置流程，只回答这次追问的点；',
+    '3. 不超过 150 字，不分点编号，不用“首先、其次、最后”这类套话；',
+    '4. 不要向民警反问。信息不够就直接说还需要核实什么。',
+    '5. 问题超出涉外执法范围的，说明不在本系统的服务范围。',
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const messages = [
+    { role: 'system', content: sys },
+    ...history.slice(-12).map((m) => ({
+      role: m.role === 'assistant' ? 'assistant' : 'user',
+      content: String(m.content || '').slice(0, 1000),
+    })),
+  ];
+
+  emit({ type: 'step', name: '理解追问' });
+  emit({ type: 'step', name: '组织回答' });
+
+  let out = '';
+  await chatStream(messages, (t) => {
+    out += t;
+    emit({ type: 'delta', text: t });
+  });
+
+  const bad = unmatchedCitations(out, arts);
+  if (bad.length) emit({ type: 'verify', unmatched: bad });
+  emit({ type: 'done', mock: false });
+}
+
 // ── 登录与会话 ──────────────────────────────────────────────
 // 演示账号写在服务端，前端拿不到；令牌用 HMAC 签名，带 12 小时有效期。
 const DEFAULT_SECRET = 'tongshi-demo-secret-change-me';
@@ -613,7 +666,7 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  if (req.url !== '/api/analyse' && req.url !== '/api/brief') {
+  if (req.url !== '/api/analyse' && req.url !== '/api/brief' && req.url !== '/api/chat') {
     res.writeHead(404).end('not found');
     return;
   }
@@ -636,10 +689,16 @@ const server = http.createServer(async (req, res) => {
   }
 
   const isBrief = req.url === '/api/brief';
+  const isChat = req.url === '/api/chat';
   const input = String(body.input || '').slice(0, 1000);
-  if (!input) {
+
+  const chatHistory = Array.isArray(body.history) ? body.history.slice(-12) : [];
+  const lastAsk = String(chatHistory[chatHistory.length - 1]?.content || '').slice(0, 1000);
+  const needInput = isChat ? lastAsk : input;
+
+  if (!needInput) {
     res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ message: '缺少现场描述' }));
+    res.end(JSON.stringify({ message: isChat ? '缺少追问内容' : '缺少现场描述' }));
     return;
   }
 
@@ -652,7 +711,19 @@ const server = http.createServer(async (req, res) => {
   const emit = (event) => res.write(`data: ${JSON.stringify(event)}\n\n`);
 
   try {
-    if (isBrief) {
+    if (isChat) {
+      await runChat(
+        {
+          history: chatHistory,
+          title: String(body.title || '').slice(0, 60),
+          brief: String(body.brief || '').slice(0, 400),
+          provisionIds: Array.isArray(body.provisionIds)
+            ? body.provisionIds.slice(0, 6).map((s) => String(s))
+            : [],
+        },
+        emit,
+      );
+    } else if (isBrief) {
       await runBrief(
         {
           input,

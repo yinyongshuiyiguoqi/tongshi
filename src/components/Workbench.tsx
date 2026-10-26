@@ -6,6 +6,8 @@ import type { Session } from '../lib/session';
 import { Empty } from './Empty';
 import { ResultCard } from './ResultCard';
 import { AiFallback } from './AiFallback';
+import { FollowUp } from './FollowUp';
+import { isEnterSend, loadEnterSend, onPrefsChange } from '../lib/prefs';
 import { CaseLibrary, HistoryView, Profile } from './Views';
 import type { BackdropSetting } from './Backdrop';
 import { Dock, type TabKey } from './Dock';
@@ -34,6 +36,9 @@ export function Workbench({
   const [listening, setListening] = useState(false);
   const [speechOk, setSpeechOk] = useState(false);
   const [toast, setToast] = useState('');
+  const [enterSend, setEnterSend] = useState(loadEnterSend);
+
+  useEffect(() => onPrefsChange(() => setEnterSend(loadEnterSend())), []);
   const recog = useRef<any>(null);
   const resultRef = useRef<HTMLElement>(null);
 
@@ -145,6 +150,12 @@ export function Workbench({
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (isEnterSend(e, enterSend)) {
+                  e.preventDefault();
+                  analyse();
+                }
+              }}
               placeholder="例如：小区门口一个外国人拿不出护照，只会说英语……"
               rows={7}
               spellCheck={false}
@@ -160,12 +171,14 @@ export function Workbench({
                 查找处置方案
               </button>
               {query && (
-                <button className="ghost-btn" onClick={reset}>
-                  清空
+                <button className="ghost-btn new-case" onClick={reset}>
+                  + 新情形
                 </button>
               )}
             </div>
-            <p className="kbd-tip">Ctrl + Enter 提交</p>
+            <p className="kbd-tip">
+              {enterSend ? 'Enter 提交 · Shift + Enter 换行' : 'Ctrl + Enter 提交'}
+            </p>
 
             <div className="examples">
               <span className="label">试试这些</span>
@@ -190,6 +203,16 @@ export function Workbench({
                 onPick={(id) => setActiveId(id)}
                 input={query}
                 token={session.token}
+              />
+            )}
+
+            {query && (
+              <FollowUp
+                key={query}
+                token={session.token}
+                title={active?.item.title ?? ''}
+                brief={active?.item.brief ?? ''}
+                provisionIds={active?.item.provisionIds ?? []}
               />
             )}
           </section>
