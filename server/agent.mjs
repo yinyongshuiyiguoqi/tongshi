@@ -295,7 +295,14 @@ const server = http.createServer(async (req, res) => {
 
   if (req.url === '/api/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ ok: true, law: Boolean(LAW_KEY), llm: Boolean(LLM_KEY) }));
+    res.end(
+      JSON.stringify({
+        ok: true,
+        law: Boolean(LAW_KEY),
+        llm: Boolean(LLM_KEY),
+        model: LLM_KEY ? LLM_MODEL : null,
+      }),
+    );
     return;
   }
 

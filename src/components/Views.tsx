@@ -1,4 +1,4 @@
-import { useMemo, useState, type ChangeEvent } from 'react';
+import { useEffect, useMemo, useState, type ChangeEvent } from 'react';
 import { CASES } from '../data/cases';
 import { clearRecent, loadRecent } from '../lib/history';
 import type { Session } from '../lib/session';
@@ -113,6 +113,14 @@ export function Profile({
   onBackdrop: (s: BackdropSetting) => void;
 }) {
   const { user } = session;
+  const [model, setModel] = useState<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    fetch('/api/health')
+      .then((r) => r.json())
+      .then((d) => setModel(d?.model ?? null))
+      .catch(() => setModel(null));
+  }, []);
 
   function pickFile(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -166,6 +174,16 @@ export function Profile({
         <div>
           <dt>登录方式</dt>
           <dd>警号 + 密码，服务端签发令牌，12 小时有效</dd>
+        </div>
+        <div>
+          <dt>大模型</dt>
+          <dd>
+            {model === undefined
+              ? '检查中…'
+              : model
+                ? `已接入 · ${model}`
+                : '未配置，当前用本地模板作答'}
+          </dd>
         </div>
         <div>
           <dt>数据存储</dt>

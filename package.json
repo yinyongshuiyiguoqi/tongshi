@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "agent": "node server/agent.mjs",
+    "check": "node scripts/check-llm.mjs",
     "start": "node server/agent.mjs",
     "build": "vite build",
     "preview": "vite preview",
