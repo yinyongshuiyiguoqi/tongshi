@@ -1,11 +1,20 @@
-import { useState } from 'react';
-import { login, type Session } from '../lib/session';
+import { useEffect, useState } from 'react';
+import { checkServer, login, type Session } from '../lib/session';
 
 export function Login({ onLogin }: { onLogin: (s: Session) => void }) {
   const [badge, setBadge] = useState('100234');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const [server, setServer] = useState<'checking' | 'up' | 'down'>('checking');
+
+  useEffect(() => {
+    let alive = true;
+    checkServer().then((ok) => alive && setServer(ok ? 'up' : 'down'));
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -32,6 +41,15 @@ export function Login({ onLogin }: { onLogin: (s: Session) => void }) {
           <span className="latin">TONGSHI</span>
         </div>
         <p className="login-sub">涉外执法现场辅助 · 内部工作台</p>
+
+        <p className={`server-state is-${server}`}>
+          <span className="server-dot" />
+          {server === 'checking'
+            ? '正在检查后端服务…'
+            : server === 'up'
+              ? '后端服务已连接'
+              : '后端服务未连接，请先双击 start.bat'}
+        </p>
 
         <label className="field">
           <span>警号</span>

@@ -131,6 +131,38 @@ textarea {
   color: var(--muted);
 }
 
+.server-state {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 14px;
+  padding: 7px 11px;
+  border-radius: 9px;
+  font-size: 12px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+}
+
+.server-state.is-up {
+  border-color: rgba(78, 207, 154, 0.3);
+  background: rgba(78, 207, 154, 0.07);
+  color: #9fe3c3;
+}
+
+.server-state.is-down {
+  border-color: rgba(255, 122, 122, 0.35);
+  background: rgba(255, 122, 122, 0.08);
+  color: #ffb3b3;
+}
+
+.server-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex: none;
+}
+
 .field {
   display: block;
   margin-top: 18px;
