@@ -89,14 +89,13 @@ textarea {
 /* ───────────────── 登录 ───────────────── */
 
 .login {
+  position: relative;
+  z-index: 1;
   min-height: 100vh;
   display: grid;
   place-items: center;
   padding: 24px;
-  background:
-    radial-gradient(760px 380px at 18% -8%, rgba(48, 86, 200, 0.22), transparent 70%),
-    radial-gradient(620px 340px at 92% 6%, rgba(120, 74, 200, 0.16), transparent 72%),
-    var(--bg);
+  background: transparent;
 }
 
 .login-card {
@@ -196,13 +195,68 @@ textarea {
 
 /* ───────────────── 顶栏 ───────────────── */
 
+/* 背景光晕：固定不动，内容在上层 */
+
+.aurora {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.aurora span {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+}
+
+.a1 {
+  width: 78vw;
+  height: 78vw;
+  left: -22vw;
+  top: -36vw;
+  background: radial-gradient(
+    circle,
+    rgba(38, 86, 255, 0.34) 0%,
+    rgba(38, 86, 255, 0.1) 36%,
+    rgba(38, 86, 255, 0) 70%
+  );
+}
+
+.a2 {
+  width: 66vw;
+  height: 66vw;
+  right: -26vw;
+  top: -14vw;
+  background: radial-gradient(
+    circle,
+    rgba(126, 74, 255, 0.26) 0%,
+    rgba(126, 74, 255, 0.08) 38%,
+    rgba(126, 74, 255, 0) 72%
+  );
+}
+
+.a3 {
+  width: 92vw;
+  height: 70vw;
+  left: 2vw;
+  bottom: -44vw;
+  background: radial-gradient(
+    circle,
+    rgba(0, 178, 190, 0.16) 0%,
+    rgba(0, 178, 190, 0.04) 42%,
+    rgba(0, 178, 190, 0) 74%
+  );
+}
+
 .app {
+  position: relative;
+  z-index: 1;
   min-height: 100vh;
   display: flex;
   flex-direction: column;
-  background:
-    radial-gradient(900px 420px at 10% -12%, rgba(50, 88, 200, 0.16), transparent 70%),
-    var(--bg);
+  background: transparent;
 }
 
 .top {
@@ -988,8 +1042,7 @@ textarea {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  /* 给底部吸附条留出空间，最后一块不被压住 */
-  padding-bottom: 84px;
+  padding-bottom: 8px;
 }
 
 .r-hero {
@@ -1094,7 +1147,9 @@ textarea {
   padding: 26px 26px 28px;
   border-radius: 18px;
   border: 1px solid var(--line);
-  background: var(--panel);
+  background: rgba(16, 19, 27, 0.72);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
 }
 
 .r-block h2 {
@@ -1227,63 +1282,38 @@ textarea {
   font-weight: 600;
 }
 
-.r-bar {
-  position: sticky;
-  bottom: 14px;
+.r-actions {
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 12px 16px;
-  border-radius: 14px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(16, 19, 28, 0.92);
-  backdrop-filter: blur(18px) saturate(160%);
-  -webkit-backdrop-filter: blur(18px) saturate(160%);
-  box-shadow: 0 20px 50px -24px rgba(0, 0, 0, 0.95);
-  z-index: 20;
-}
-
-.r-bar-meta {
-  flex: 1;
-  font-size: 12.5px;
-  color: var(--muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.r-bar-actions {
-  display: flex;
   gap: 8px;
+  margin-top: 18px;
+  flex-wrap: wrap;
 }
 
-.r-bar-actions button {
+.r-actions button {
   padding: 8px 14px;
   border-radius: 9px;
   border: 1px solid var(--line);
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(255, 255, 255, 0.05);
   font-size: 12.5px;
   color: var(--muted);
   white-space: nowrap;
   transition: border-color 0.2s, color 0.2s;
 }
 
-.r-bar-actions button:hover {
+.r-actions button:hover {
   border-color: rgba(255, 255, 255, 0.24);
   color: var(--ink);
 }
 
-.r-bar-primary {
+.r-actions-primary {
   background: #f2f5fb !important;
   border-color: #f2f5fb !important;
   color: #080a10 !important;
   font-weight: 600;
 }
 
-.r-bar-toast {
-  position: absolute;
-  right: 16px;
-  top: -30px;
+.r-actions-toast {
   font-size: 11.5px;
   color: var(--ok);
 }
@@ -1395,7 +1425,9 @@ textarea {
   padding: 16px 18px;
   border-radius: 16px;
   border: 1px solid var(--line);
-  background: var(--panel);
+  background: rgba(16, 19, 27, 0.7);
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
   text-align: left;
   transition: border-color 0.2s var(--ease), transform 0.2s var(--ease);
 }
@@ -1487,7 +1519,9 @@ textarea {
   padding: 20px;
   border-radius: 18px;
   border: 1px solid var(--line);
-  background: var(--panel);
+  background: rgba(16, 19, 27, 0.72);
+  backdrop-filter: blur(18px) saturate(150%);
+  -webkit-backdrop-filter: blur(18px) saturate(150%);
 }
 
 .avatar {
@@ -1557,7 +1591,7 @@ textarea {
   .card-toast,
   .empty,
   .trace,
-  .r-bar,
+  .r-actions,
   .r-tiles,
   .dock {
     display: none !important;

@@ -52,6 +52,15 @@ export function ResultCard({
           )}
         </p>
 
+        <div className="r-actions">
+          <button onClick={() => copy(zh, '中文话术')}>复制中文</button>
+          {en && <button onClick={() => copy(en, '英文话术')}>复制英文</button>}
+          <button className="r-actions-primary" onClick={() => window.print()}>
+            打印 / 存为 PDF
+          </button>
+          {toast && <span className="r-actions-toast">{toast}</span>}
+        </div>
+
         {low && (
           <p className="r-warn">
             匹配度偏低，请核对下方依据再决定是否采用，必要时补充信息重新查找。
@@ -132,19 +141,6 @@ export function ResultCard({
         </div>
       </section>
 
-      <div className="r-bar">
-        <span className="r-bar-meta">
-          匹配度 {Math.round(score * 100)}% · {item.title}
-        </span>
-        <div className="r-bar-actions">
-          <button onClick={() => copy(zh, '中文话术')}>复制中文</button>
-          {en && <button onClick={() => copy(en, '英文话术')}>复制英文</button>}
-          <button className="r-bar-primary" onClick={() => window.print()}>
-            打印 / 存为 PDF
-          </button>
-        </div>
-        {toast && <span className="r-bar-toast">{toast}</span>}
-      </div>
     </article>
   );
 }
