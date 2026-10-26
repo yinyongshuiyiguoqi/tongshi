@@ -229,6 +229,16 @@ npm run build
 SESSION_SECRET=<随机长串> node server/agent.mjs
 ```
 
+**要固定域名、放到云服务器上，按 [`部署指北.md`](./部署指北.md) 走**，
+里面有服务器/域名的选购、打包上传、systemd 开机自启、Caddy 自动 HTTPS 的完整步骤。
+配套文件在 `deploy/`：
+
+| 文件 | 用途 |
+|---|---|
+| `pack.ps1` | 本地打包成 `tongshi-deploy.tar.gz`，只含运行所需文件 |
+| `tongshi.service` | systemd 单元，失败的自动重启、开机自启 |
+| `Caddyfile` | 反向代理 + 自动申请证书，SSE 不缓冲 |
+
 两个必须设置的环境变量：
 
 - `SESSION_SECRET`：不设就用默认值，任何人都能伪造令牌。`NODE_ENV=production` 时

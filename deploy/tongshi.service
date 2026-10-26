@@ -1,0 +1,32 @@
+# 放到 /etc/systemd/system/tongshi.service
+# 然后：sudo systemctl daemon-reload && sudo systemctl enable --now tongshi
+#
+# 路径按实际部署目录改（下面假设是 /srv/tongshi）
+
+[Unit]
+Description=通事 涉外执法现场辅助
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=tongshi
+Group=tongshi
+WorkingDirectory=/srv/tongshi
+EnvironmentFile=/srv/tongshi/.env
+ExecStart=/usr/bin/node server/agent.mjs
+Restart=always
+RestartSec=3
+
+# 会话密钥必须走环境变量，服务端检测到默认值会拒绝启动（NODE_ENV=production）
+Environment=NODE_ENV=production
+
+# 基本收紧
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/srv/tongshi
+
+[Install]
+WantedBy=multi-user.target

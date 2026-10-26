@@ -1,0 +1,19 @@
+# 把 tongshi.example.com 换成你自己的域名，其余不用改。
+# Caddy 会自动申请并续期 HTTPS 证书，不用手动配 certbot。
+
+tongshi.example.com {
+	encode gzip zstd
+
+	# 所有请求都交给 Node 服务（它同时提供前端和 /api）
+	reverse_proxy 127.0.0.1:8787 {
+		# SSE 需要及时下发，别攒着
+		flush_interval -1
+	}
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		X-Content-Type-Options nosniff
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+}
