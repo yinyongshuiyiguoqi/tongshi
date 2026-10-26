@@ -175,29 +175,12 @@ export function Workbench({
           {query && !active && <AiFallback input={query} token={session.token} />}
 
           {query && active && (
-            <>
-              <ResultCard
-                result={active}
-                low={lowConfidence}
-                onPick={(id) => setActiveId(id)}
-              />
-
-              {matches.length > 1 && (
-                <div className="others">
-                  <span className="label">其他可能情形</span>
-                  {matches.map((m) => (
-                    <button
-                      key={m.item.id}
-                      className={`other${m.item.id === active.item.id ? ' is-on' : ''}`}
-                      onClick={() => setActiveId(m.item.id)}
-                    >
-                      <span className="other-title">{m.item.title}</span>
-                      <span className="other-score">{Math.round(m.score * 100)}%</span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </>
+            <ResultCard
+              result={active}
+              matches={matches}
+              low={lowConfidence}
+              onPick={(id) => setActiveId(id)}
+            />
           )}
         </section>
       </main>

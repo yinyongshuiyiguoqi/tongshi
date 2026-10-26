@@ -1,0 +1,136 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#08090d" />
+    <title>通事 TONGSHI · 涉外执法现场助手</title>
+    <link rel="stylesheet" href="/src/showcase.css" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='9' fill='%230a0b10'/><path d='M9 11h14M16 11v12M11 17h10' stroke='%235b8cff' stroke-width='2' fill='none' stroke-linecap='round'/></svg>"
+    />
+  </head>
+  <body>
+    <header class="nav">
+      <span class="nav-brand">通事</span>
+      <nav>
+        <a href="#input">输入</a>
+        <a href="#match">匹配</a>
+        <a href="#law">依据</a>
+        <a href="#agent">Agent</a>
+      </nav>
+      <a class="nav-cta" href="/">打开应用</a>
+    </header>
+
+    <main>
+      <section class="hero">
+        <p class="eyebrow">传智杯 · AI 安全与内容治理</p>
+        <h1>通事。</h1>
+        <p class="price">九类情形 · 中英双语话术 · 一次研判约五秒</p>
+        <p class="lead">
+          面向基层民警的涉外执法现场助手。用一句话描述现场，系统匹配处置方案，
+          给出流程、依据和可以直接照着念的话。
+        </p>
+      </section>
+
+      <section class="stage" aria-hidden="true">
+        <div class="mock">
+          <div class="mock-left">
+            <span class="mock-label">现场情况</span>
+            <p class="mock-text">
+              小区门口一个外国人拿不出护照，只会说英语，问他来干什么也说不清
+            </p>
+            <span class="mock-btn">查找处置方案</span>
+          </div>
+          <div class="mock-right">
+            <span class="mock-kicker">匹配结果 · 一般处置</span>
+            <h3>外籍人员无法出示证件。</h3>
+            <p class="mock-sub">匹配度 54% · 命中 拿不出</p>
+            <ul class="mock-steps">
+              <li><i>01</i>表明执法身份，出示人民警察证</li>
+              <li><i>02</i>核验护照原件与签证有效期</li>
+              <li><i>03</i>无法核实的，依法带回继续盘问</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="block" id="input">
+        <h2>描述。</h2>
+        <p class="body">
+          不用套格式。时间、地点、国籍、对方说了什么，知道多少写多少。口语、错别字、
+          信息不全都能处理，系统会按关键词和相似度去比对，而不是要求你选菜单。
+        </p>
+        <div class="tiles">
+          <div class="tile">
+            <span class="tile-t">街头盘查</span>
+            <span class="tile-d">拿不出护照，只会说英语</span>
+          </div>
+          <div class="tile">
+            <span class="tile-t">住宿登记</span>
+            <span class="tile-d">住朋友家一周未登记</span>
+          </div>
+          <div class="tile">
+            <span class="tile-t">醉酒滋事</span>
+            <span class="tile-d">酒吧门口闹事，倒在地上</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="block" id="match">
+        <h2>匹配。</h2>
+        <p class="body">
+          情形库里的每一条都有触发描述和关键词，输入会同时走两路打分：关键词命中给可解释的依据，
+          字符相似度兜住没见过的说法。分数低的时候系统会明说，不硬给结论。
+        </p>
+        <div class="bars">
+          <div class="bar-row"><span>外籍人员无法出示证件</span><i style="--w: 54%"></i><b>54</b></div>
+          <div class="bar-row"><span>涉外纠纷、肢体冲突</span><i style="--w: 21%"></i><b>21</b></div>
+          <div class="bar-row"><span>外籍人员醉酒滋事</span><i style="--w: 14%"></i><b>14</b></div>
+        </div>
+        <p class="foot-note">分数为真实匹配结果，输入取自演示用例。</p>
+      </section>
+
+      <section class="block" id="law">
+        <h2>依据。</h2>
+        <p class="body">
+          情形库没命中时，系统先调用法规检索接口，只取现行有效的条文，再把检索结果作为上下文
+          交给模型。模型能说什么，由检索结果决定。
+        </p>
+        <div class="law-card">
+          <span class="law-name">中华人民共和国出境入境管理法 第三十九条</span>
+          <span class="law-topic">外国人住宿登记 · 法律 · 现行有效</span>
+          <p class="law-text">
+            外国人在旅馆以外住所居住或住宿的，应当在入住后二十四小时内由本人或者留宿人，
+            向居住地公安机关办理登记。
+          </p>
+        </div>
+      </section>
+
+      <section class="block" id="agent">
+        <h2>Agent。</h2>
+        <p class="body">
+          服务端跑一个循环：理解描述、判断要不要查法条、调用检索工具、拿到结果再组织答案。
+          中间过程实时推回前端，民警看得见它查了什么，不是黑箱吐一段话。
+        </p>
+        <ol class="trace">
+          <li><span></span>理解现场描述</li>
+          <li><span></span>检索法规</li>
+          <li><span></span>组织研判</li>
+        </ol>
+      </section>
+
+      <section class="cta">
+        <h2>现在可以试。</h2>
+        <p class="body">演示账号已内置，打开就能用。技术文档与在线演示地址随作品提交。</p>
+        <a class="big-btn" href="/">打开工作台</a>
+      </section>
+    </main>
+
+    <footer class="bar">
+      <span class="bar-meta">中国人民警察大学 · 国际执法合作学院 · 传智杯 2026</span>
+      <a class="bar-cta" href="/">打开工作台</a>
+    </footer>
+  </body>
+</html>

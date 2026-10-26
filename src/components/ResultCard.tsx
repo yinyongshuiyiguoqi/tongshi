@@ -4,10 +4,12 @@ import type { MatchResult } from '../lib/match';
 
 export function ResultCard({
   result,
+  matches,
   low,
   onPick,
 }: {
   result: MatchResult;
+  matches: MatchResult[];
   low: boolean;
   onPick: (id: string) => void;
 }) {
@@ -35,88 +37,114 @@ export function ResultCard({
     .join('\n');
 
   return (
-    <article className={`card sev-${item.severity}`}>
-      <div className="card-head">
-        <div>
-          <span className="card-kicker">匹配结果</span>
-          <h2>{item.title}</h2>
-        </div>
-        <div className="score">
-          <span className="score-num">{Math.round(score * 100)}</span>
-          <span className="score-unit">%</span>
-        </div>
-      </div>
-
-      {low && (
-        <p className="low-warn">
-          匹配置信度偏低，请核对下方依据后再决定是否采用，必要时补充信息重新查找。
+    <article className="rpage">
+      <header className={`r-hero sev-${item.severity}`}>
+        <span className="r-kicker">
+          匹配结果 · {item.severity === '高' ? '高处置强度' : item.severity === '中' ? '中等处置强度' : '一般处置'}
+        </span>
+        <h1>{item.title}。</h1>
+        <p className="r-sub">
+          匹配度 <b>{Math.round(score * 100)}%</b>
+          {hits.length > 0 && (
+            <>
+              <span className="r-dot">·</span>命中 {hits.slice(0, 4).map((h) => h.w).join('、')}
+            </>
+          )}
         </p>
-      )}
 
-      <div className="hits">
-        <span className="label">命中</span>
-        {hits.slice(0, 6).map((h) => (
-          <span key={h.w} className="hit">
-            {h.w}
-          </span>
-        ))}
-        {hits.length === 0 && <span className="hit muted-tag">无关键词命中，仅形似</span>}
-      </div>
+        {low && (
+          <p className="r-warn">
+            匹配度偏低，请核对下方依据再决定是否采用，必要时补充信息重新查找。
+          </p>
+        )}
 
-      <h3>处置流程</h3>
-      <ol className="steps-list">
-        {item.steps.map((s, i) => (
-          <li key={i}>
-            <span className="step-no">{i + 1}</span>
-            <span>{s}</span>
-          </li>
-        ))}
-      </ol>
-
-      <h3>研判意见</h3>
-      <p className="advice">{item.brief}</p>
-
-      <h3>依据</h3>
-      <ul className="provisions">
-        {provisions.map((p) => (
-          <li key={p.id}>
-            <p className="p-law">
-              {p.law}
-              {p.article && <span> {p.article}</span>}
-            </p>
-            <p className="p-topic">{p.topic}</p>
-            <p className="p-sum">{p.summary}</p>
-          </li>
-        ))}
-      </ul>
-
-      <h3>现场话术</h3>
-      <div className="scripts">
-        {item.scripts.map((s, i) => (
-          <div key={i} className="script">
-            <p className="zh">{s.zh}</p>
-            {s.en && <p className="en">{s.en}</p>}
+        {matches.length > 1 && (
+          <div className="r-tiles" role="radiogroup" aria-label="其他可能情形">
+            {matches.map((m) => (
+              <button
+                key={m.item.id}
+                role="radio"
+                aria-checked={m.item.id === item.id}
+                className={`r-tile${m.item.id === item.id ? ' is-on' : ''}`}
+                onClick={() => onPick(m.item.id)}
+              >
+                <span className="r-tile-score">{Math.round(m.score * 100)}%</span>
+                <span className="r-tile-name">{m.item.title}</span>
+              </button>
+            ))}
           </div>
-        ))}
+        )}
+      </header>
+
+      <section className="r-block">
+        <h2>现场判断。</h2>
+        <p className="r-lead">{item.brief}</p>
+      </section>
+
+      <section className="r-block">
+        <h2>处置流程。</h2>
+        <ol className="r-steps">
+          {item.steps.map((s, i) => (
+            <li key={i}>
+              <span className="r-step-no">{String(i + 1).padStart(2, '0')}</span>
+              <span>{s}</span>
+            </li>
+          ))}
+        </ol>
+      </section>
+
+      <section className="r-block">
+        <h2>现场话术。</h2>
+        <div className="r-scripts">
+          {item.scripts.map((s, i) => (
+            <div key={i} className="r-script">
+              <p className="r-zh">{s.zh}</p>
+              {s.en && <p className="r-en">{s.en}</p>}
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <section className="r-block">
+        <h2>依据。</h2>
+        <ul className="r-laws">
+          {provisions.map((p) => (
+            <li key={p.id}>
+              <p className="r-law">
+                {p.law}
+                {p.article && <span> {p.article}</span>}
+              </p>
+              <p className="r-topic">{p.topic}</p>
+              <p className="r-sum">{p.summary}</p>
+            </li>
+          ))}
+        </ul>
+      </section>
+
+      <section className="r-block r-notes">
+        <div className="r-note">
+          <b>注意</b>
+          <span>{item.risk}</span>
+        </div>
+        <div className="r-note">
+          <b>还需要确认</b>
+          <span>{item.followUp}</span>
+        </div>
+      </section>
+
+      <div className="r-bar">
+        <span className="r-bar-meta">
+          匹配度 {Math.round(score * 100)}% · {item.title}
+        </span>
+        <div className="r-bar-actions">
+          <button onClick={() => copy(zh, '中文话术')}>复制中文</button>
+          {en && <button onClick={() => copy(en, '英文话术')}>复制英文</button>}
+          <button className="r-bar-primary" onClick={() => window.print()}>
+            打印 / 存为 PDF
+          </button>
+        </div>
+        {toast && <span className="r-bar-toast">{toast}</span>}
       </div>
-
-      <div className="card-actions">
-        <button onClick={() => copy(zh, '中文话术')}>复制中文</button>
-        {en && <button onClick={() => copy(en, '英文话术')}>复制英文</button>}
-        <button onClick={() => window.print()}>打印 / 存为 PDF</button>
-      </div>
-
-      <p className="risk">
-        <b>注意</b>
-        {item.risk}
-      </p>
-
-      <p className="followup">
-        <b>还需要确认</b>
-        {item.followUp}
-      </p>
-
-      {toast && <span className="card-toast">{toast}</span>}
     </article>
   );
 }

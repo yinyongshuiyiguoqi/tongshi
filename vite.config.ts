@@ -4,6 +4,14 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   base: './',
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      input: {
+        main: 'index.html',
+        showcase: 'showcase.html',
+      },
+    },
+  },
   server: {
     port: 5180,
     open: true,
