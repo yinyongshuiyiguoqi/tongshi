@@ -2,7 +2,9 @@
 从本机直接部署到云服务器（SSH + SFTP），省掉手动登录敲命令。
 
 用法：
-    uv run --with paramiko python deploy/remote-deploy.py <IP> <root密码> [域名]
+    uv run --with paramiko python deploy/remote-deploy.py <IP> <root密码或私钥路径> [域名]
+
+    第二个参数如果是一个存在的文件路径，就按密钥登录（服务器禁用了密码登录时用这个）。
 
 做了这些事：
   1. 上传 deploy/tongshi-deploy.tar.gz 与 deploy/server-setup.sh
@@ -46,7 +48,14 @@ def main():
     print(f"连接 {HOST} …")
     client = paramiko.SSHClient()
     client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-    client.connect(HOST, 22, "root", PWD, timeout=25, banner_timeout=25, auth_timeout=25)
+    kwargs = dict(hostname=HOST, port=22, username="root", timeout=25, banner_timeout=25, auth_timeout=25)
+    if os.path.exists(PWD):
+        kwargs["key_filename"] = PWD
+        kwargs["look_for_keys"] = False
+        kwargs["allow_agent"] = False
+    else:
+        kwargs["password"] = PWD
+    client.connect(**kwargs)
     print("已登录")
 
     def run(cmd, timeout=900):

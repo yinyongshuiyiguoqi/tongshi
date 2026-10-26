@@ -68,7 +68,12 @@ chown -R tongshi:tongshi "$APP_DIR"
 if [ ! -f "$APP_DIR/.env" ]; then
   cp "$APP_DIR/.env.example" "$APP_DIR/.env"
   SECRET=$(node -e "console.log(require('crypto').randomBytes(32).toString('hex'))")
-  sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=$SECRET|" "$APP_DIR/.env"
+  # .env.example 里本来没有这一行，得先确认再写，不然后端在生产模式会拒绝启动
+  if grep -q '^SESSION_SECRET=' "$APP_DIR/.env"; then
+    sed -i "s|^SESSION_SECRET=.*|SESSION_SECRET=$SECRET|" "$APP_DIR/.env"
+  else
+    echo "SESSION_SECRET=$SECRET" >> "$APP_DIR/.env"
+  fi
   chown tongshi:tongshi "$APP_DIR/.env"
   chmod 600 "$APP_DIR/.env"
   echo "==> 已生成 $APP_DIR/.env（SESSION_SECRET 随机填好），密钥还得你自己填"

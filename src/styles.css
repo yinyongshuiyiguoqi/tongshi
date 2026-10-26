@@ -1,4 +1,4 @@
-﻿*,
+*,
 *::before,
 *::after {
   box-sizing: border-box;
@@ -1951,6 +1951,19 @@ select option:checked {
 }
 
 /* 音色选择 */
+.voice-label {
+  margin: 16px 0 0;
+  font-size: 12px;
+  color: var(--muted);
+  letter-spacing: 0.04em;
+}
+
+.voice-empty {
+  margin: 10px 0 0;
+  font-size: 12.5px;
+  color: var(--faint);
+}
+
 .voice-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1970,9 +1983,12 @@ select option:checked {
 
 .voice-chip b {
   display: block;
+  overflow: hidden;
   font-size: 13px;
   font-weight: 500;
   color: var(--ink);
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .voice-chip em {

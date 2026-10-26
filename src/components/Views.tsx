@@ -8,7 +8,17 @@ import {
   saveDockFrost,
   saveEnterSend,
 } from '../lib/prefs';
-import { loadVoiceId, saveVoiceId, speak, VOICE_PRESETS } from '../lib/speech';
+import {
+  loadVoiceId,
+  saveVoiceId,
+  speak,
+  VOICE_PRESETS,
+  listVoices,
+  loadVoiceUri,
+  saveVoiceUri,
+  voiceLabel,
+  voiceHint,
+} from '../lib/speech';
 import type { Session } from '../lib/session';
 import { PHOTOS, photoUrl, type BackdropSetting } from './Backdrop';
 import { SwitchRow } from './SwitchRow';
@@ -124,17 +134,52 @@ export function Profile({
   const { user } = session;
   const [model, setModel] = useState<string | null | undefined>(undefined);
   const [enterSend, setEnterSend] = useState(loadEnterSend);
-  const [voice, setVoice] = useState(loadVoiceId);
+  const [tone, setTone] = useState(loadVoiceId);
+  const [voices, setVoices] = useState<SpeechSynthesisVoice[]>([]);
+  const [zhVoice, setZhVoice] = useState(() => loadVoiceUri('zh-CN'));
+  const [enVoice, setEnVoice] = useState(() => loadVoiceUri('en-US'));
   const [dockFrost, setDockFrost] = useState(loadDockFrost);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+    const synth = window.speechSynthesis;
+    const update = () => setVoices(synth.getVoices());
+    update();
+    synth.addEventListener?.('voiceschanged', update);
+    return () => synth.removeEventListener?.('voiceschanged', update);
+  }, []);
+
+  const zhVoices = useMemo(
+    () => voices.filter((v) => v.lang.toLowerCase().startsWith('zh')),
+    [voices],
+  );
+  const enVoices = useMemo(
+    () => voices.filter((v) => v.lang.toLowerCase().startsWith('en')),
+    [voices],
+  );
 
   function toggleEnter(on: boolean) {
     setEnterSend(on);
     saveEnterSend(on);
   }
 
-  function pickVoice(id: string) {
-    setVoice(id);
+  function pickTone(id: string) {
+    setTone(id);
     saveVoiceId(id);
+    speak('您好，我是执勤民警，请出示您的护照和签证。', 'zh-CN', zhVoice || undefined);
+  }
+
+  function pickAcoustic(lang: 'zh-CN' | 'en-US', uri: string) {
+    saveVoiceUri(lang, uri);
+    if (lang === 'zh-CN') setZhVoice(uri);
+    else setEnVoice(uri);
+    speak(
+      lang === 'zh-CN'
+        ? '您好，我是执勤民警，请出示您的护照和签证。'
+        : "Hello, I'm a police officer on duty. Please show your passport and visa.",
+      lang,
+      uri,
+    );
   }
 
   useEffect(() => {
@@ -241,24 +286,71 @@ export function Profile({
 
       <section className="bg-section">
         <h3>语音</h3>
-        <p className="bg-hint">现场话术播报用的音色，选一个再试听。</p>
+        <p className="bg-hint">先选系统音色，再用语气微调；点一下会自动试听。</p>
+
+        <p className="voice-label">中文音色</p>
+        {zhVoices.length > 0 ? (
+          <div className="voice-grid">
+            {zhVoices.map((v) => (
+              <button
+                key={v.voiceURI}
+                className={`voice-chip${(zhVoice || zhVoices[0]?.voiceURI) === v.voiceURI ? ' is-on' : ''}`}
+                onClick={() => pickAcoustic('zh-CN', v.voiceURI)}
+                title={v.name}
+              >
+                <b>{voiceLabel(v)}</b>
+                <em>
+                  {voiceHint(v)} · {v.lang}
+                </em>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="voice-empty">系统还没返回中文音色，稍等一下或检查系统语音包。</p>
+        )}
+
+        <p className="voice-label">英文音色</p>
+        {enVoices.length > 0 ? (
+          <div className="voice-grid">
+            {enVoices.map((v) => (
+              <button
+                key={v.voiceURI}
+                className={`voice-chip${(enVoice || enVoices[0]?.voiceURI) === v.voiceURI ? ' is-on' : ''}`}
+                onClick={() => pickAcoustic('en-US', v.voiceURI)}
+                title={v.name}
+              >
+                <b>{voiceLabel(v)}</b>
+                <em>
+                  {voiceHint(v)} · {v.lang}
+                </em>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <p className="voice-empty">系统还没返回英文音色，稍等一下或检查系统语音包。</p>
+        )}
+
+        <p className="voice-label">语气</p>
         <div className="voice-grid">
           {VOICE_PRESETS.map((v) => (
             <button
               key={v.id}
-              className={`voice-chip${voice === v.id ? ' is-on' : ''}`}
-              onClick={() => pickVoice(v.id)}
+              className={`voice-chip${tone === v.id ? ' is-on' : ''}`}
+              onClick={() => pickTone(v.id)}
             >
               <b>{v.label}</b>
               <em>{v.desc}</em>
             </button>
           ))}
         </div>
+
         <button
           className="voice-try"
-          onClick={() => speak('您好，我是执勤民警，请出示您的护照和签证。', 'zh-CN')}
+          onClick={() =>
+            speak('您好，我是执勤民警，请出示您的护照和签证。', 'zh-CN', zhVoice || undefined)
+          }
         >
-          试听当前音色
+          试听当前中文音色
         </button>
       </section>
 
