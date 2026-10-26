@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import { provisionById } from '../data/cases';
 import type { MatchResult } from '../lib/match';
 import { CaseBrief } from './CaseBrief';
@@ -106,9 +106,7 @@ export function ResultCard({
         </ol>
         <SpeakBar
           text={item.steps.map((s, i) => `${i + 1}、${s}`).join(' ')}
-          token={token}
-          compact
-        />
+          token={token} />
       </section>
 
       <section className="r-block">
@@ -147,9 +145,7 @@ export function ResultCard({
           text={provisions
             .map((p) => `《${p.law}》${p.article}：${p.summary}`)
             .join(' ')}
-          token={token}
-          compact
-        />
+          token={token} />
       </section>
 
       <section className="r-block r-notes">
@@ -166,3 +162,4 @@ export function ResultCard({
     </article>
   );
 }
+

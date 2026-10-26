@@ -1520,15 +1520,6 @@ textarea {
   background: rgba(91, 140, 255, 0.14);
 }
 
-.speak-bar.is-compact {
-  margin-top: 10px;
-}
-
-.speak-bar.is-compact button {
-  padding: 4px 10px;
-  font-size: 11px;
-}
-
 .speak-out {
   flex-basis: 100%;
   margin-top: 10px;

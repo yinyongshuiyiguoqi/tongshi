@@ -1,4 +1,4 @@
-import { useState } from 'react';
+﻿import { useState } from 'react';
 import type { AgentResult } from '../lib/agent';
 import type { LawArticle } from '../lib/legal';
 import { ScriptItem } from './ScriptItem';
@@ -89,7 +89,7 @@ export function AgentCard({
         <section className="r-block">
           <h2>AI 研判</h2>
           <p className="r-lead">{data.judgement}</p>
-          <SpeakBar text={data.judgement} token={token} compact />
+          <SpeakBar text={data.judgement} token={token} />
         </section>
       )}
 
@@ -104,7 +104,7 @@ export function AgentCard({
               </li>
             ))}
           </ol>
-          <SpeakBar text={stepsText} token={token} compact />
+          <SpeakBar text={stepsText} token={token} />
         </section>
       )}
 
@@ -135,7 +135,7 @@ export function AgentCard({
               </li>
             ))}
           </ul>
-          <SpeakBar text={articlesText} token={token} compact />
+          <SpeakBar text={articlesText} token={token} />
         </section>
       )}
 
@@ -154,3 +154,4 @@ export function AgentCard({
     </article>
   );
 }
+

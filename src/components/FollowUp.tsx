@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+﻿import { useEffect, useRef, useState } from 'react';
 import { runChat, type ChatMessage } from '../lib/agent';
 import { isEnterSend, loadEnterSend, onPrefsChange } from '../lib/prefs';
 import { SpeakBar } from './SpeakBar';
@@ -84,7 +84,7 @@ export function FollowUp({
         <div key={i} className={`chat-msg ${m.role}`}>
           <span className="chat-role">{m.role === 'user' ? '你' : '研判'}</span>
           <p>{m.content}</p>
-          {m.role === 'assistant' && <SpeakBar text={m.content} token={token} compact />}
+          {m.role === 'assistant' && <SpeakBar text={m.content} token={token} />}
         </div>
       ))}
 
@@ -126,3 +126,4 @@ export function FollowUp({
     </section>
   );
 }
+

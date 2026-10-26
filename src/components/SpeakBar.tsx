@@ -4,25 +4,25 @@ import { LANGUAGES, type LangOption } from '../lib/languages';
 import { canSpeak, speak, stopSpeaking } from '../lib/speech';
 
 /**
- * 任意一段 AI 回答的朗读条。
+ * 任意一段结果的朗读条。
  *
- * 预设情形有审定好的双语话术，模型现写的回答没有，所以这里补一个：
- * 中文直接念，别的语种先翻再念，选中就播。
+ * 三个按钮跟现场话术那一行保持一致：播报中文 / Play English / Other languages…?
+ * 没有现成英文的段落，按英文翻一遍再念。
  */
 export function SpeakBar({
   text,
   token,
-  compact = false,
+  en,
 }: {
   text: string;
   token: string;
-  compact?: boolean;
+  en?: string;
 }) {
-  const [speaking, setSpeaking] = useState(false);
+  const [speaking, setSpeaking] = useState<'' | 'zh' | 'en' | 'other'>('');
   const [menu, setMenu] = useState(false);
   const [picked, setPicked] = useState<LangOption | null>(null);
   const [translated, setTranslated] = useState('');
-  const [loading, setLoading] = useState(false);
+  const [busy, setBusy] = useState<'' | 'en' | 'other'>('');
   const [err, setErr] = useState('');
   const wrapRef = useRef<HTMLDivElement>(null);
 
@@ -37,23 +37,46 @@ export function SpeakBar({
 
   useEffect(() => () => stopSpeaking(), []);
 
-  function toggle(lang: string) {
-    if (speaking) {
+  function toggle(say: string, lang: string, key: 'zh' | 'en' | 'other') {
+    if (speaking === key) {
       stopSpeaking();
-      setSpeaking(false);
+      setSpeaking('');
       return;
     }
-    if (!speak(text, lang)) {
+    if (!speak(say, lang)) {
       setErr('当前浏览器不支持语音播报');
       return;
     }
-    setSpeaking(true);
+    setSpeaking(key);
     const timer = window.setInterval(() => {
       if (!window.speechSynthesis.speaking) {
-        setSpeaking(false);
+        setSpeaking('');
         window.clearInterval(timer);
       }
     }, 400);
+  }
+
+  async function playEnglish() {
+    if (speaking === 'en') {
+      stopSpeaking();
+      setSpeaking('');
+      return;
+    }
+    if (en) {
+      toggle(en, 'en-US', 'en');
+      return;
+    }
+
+    setErr('');
+    setBusy('en');
+    try {
+      const { text: out } = await translateText(text, '英语', token, undefined, 'en-US', false);
+      setBusy('');
+      toggle(out, 'en-US', 'en');
+    } catch {
+      setBusy('');
+      setErr('翻译没成功，稍后再试');
+    }
   }
 
   async function choose(lang: LangOption) {
@@ -62,35 +85,24 @@ export function SpeakBar({
     setErr('');
 
     if (lang.code === 'zh-CN') {
-      toggle('zh-CN');
+      toggle(text, 'zh-CN', 'zh');
+      return;
+    }
+    if (lang.code === 'en-US' && en) {
+      toggle(en, 'en-US', 'en');
       return;
     }
 
     stopSpeaking();
-    setLoading(true);
+    setBusy('other');
     setTranslated('');
     try {
-      const { text: out } = await translateText(
-        text,
-        lang.name,
-        token,
-        undefined,
-        lang.code,
-        false,
-      );
-      setLoading(false);
+      const { text: out } = await translateText(text, lang.name, token, undefined, lang.code, false);
+      setBusy('');
       setTranslated(out);
-      if (speak(out, lang.code)) {
-        setSpeaking(true);
-        const timer = window.setInterval(() => {
-          if (!window.speechSynthesis.speaking) {
-            setSpeaking(false);
-            window.clearInterval(timer);
-          }
-        }, 400);
-      }
+      toggle(out, lang.code, 'other');
     } catch {
-      setLoading(false);
+      setBusy('');
       setErr('翻译没成功，稍后再试');
     }
   }
@@ -98,14 +110,18 @@ export function SpeakBar({
   if (!canSpeak() || !text.trim()) return null;
 
   return (
-    <div className={`speak-bar${compact ? ' is-compact' : ''}`} ref={wrapRef}>
-      <button className={speaking ? 'is-on' : ''} onClick={() => toggle('zh-CN')}>
-        {speaking ? '停止' : compact ? '播报' : '播报中文'}
+    <div className="speak-bar" ref={wrapRef}>
+      <button className={speaking === 'zh' ? 'is-on' : ''} onClick={() => toggle(text, 'zh-CN', 'zh')}>
+        {speaking === 'zh' ? '停止' : '播报中文'}
+      </button>
+
+      <button className={speaking === 'en' ? 'is-on' : ''} onClick={playEnglish}>
+        {speaking === 'en' ? 'Stop' : busy === 'en' ? '翻译中…' : 'Play English'}
       </button>
 
       <div className="lang-wrap">
         <button className={menu ? 'is-on' : ''} onClick={() => setMenu((m) => !m)}>
-          {loading ? '翻译中…' : 'Other languages…?'}
+          {busy === 'other' ? '翻译中…' : 'Other languages…?'}
         </button>
         {menu && (
           <div className="lang-menu" role="menu">
