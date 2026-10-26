@@ -2221,6 +2221,17 @@ select option:checked {
   pointer-events: none;
 }
 
+/* 整体压暗一层，玻璃画在 WebGL 里，只能这样统一降亮度 */
+.dock::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border-radius: 29px;
+  background: rgba(6, 9, 14, 0.22);
+  pointer-events: none;
+  z-index: 0;
+}
+
 /* 会跟着手指走的那块玻璃 */
 
 .dock-lens {

@@ -108,7 +108,7 @@ export function Dock({ value, onChange }: { value: TabKey; onChange: (k: TabKey)
     // 液态玻璃和毛玻璃的区别在「折射」和「雾化」：
     // frost 越大越糊，同时把折射压下去，否则两侧手感还是同一种玻璃。
     const glass = new LiquidGlass(el, {
-      tint: 0.55 + frost * 0.15,
+      tint: 0.64 + frost * 0.14,
       tintTone: 'dark',
       frost,
       material: { refraction: 108 - frost * 88 },
