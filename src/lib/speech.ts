@@ -3,11 +3,13 @@
 export type SpeakLang = string;
 
 /**
- * 音色。
+ * 语气。
  *
- * 浏览器自带的语音合成只能调音高和语速，不能真正换嗓子，
- * 所以这里做的是几套「听起来像不同人」的参数：低而慢偏沉稳，高而快偏播报。
- * 参考 Siri 的几种语音人格命名，选中的记在本机。
+ * 浏览器自带的语音合成不能保证每个系统都装了多套嗓子，所以把两件事分开：
+ * - 「音色」选系统里实际存在的 voice（Xiaoxiao / Yunxi / Aria ...）；
+ * - 「语气」只调 pitch / rate，让同一个音色也有沉稳、温和、播报等差别。
+ *
+ * 选中的音色和语气都记在本机。
  */
 export interface VoicePreset {
   id: string;
@@ -27,6 +29,14 @@ export const VOICE_PRESETS: VoicePreset[] = [
 ];
 
 const VOICE_KEY = 'tongshi.voice';
+const VOICE_URI_PREFIX = 'tongshi.voiceURI.';
+
+function langKey(lang: SpeakLang): string {
+  return String(lang || 'zh-CN')
+    .replace('_', '-')
+    .slice(0, 2)
+    .toLowerCase();
+}
 
 export function loadVoiceId(): string {
   try {
@@ -53,32 +63,104 @@ export function canSpeak(): boolean {
   return typeof window !== 'undefined' && 'speechSynthesis' in window;
 }
 
-function pickVoice(lang: SpeakLang): SpeechSynthesisVoice | null {
-  const want = lang.slice(0, 2).toLowerCase();
-  const voices = window.speechSynthesis.getVoices();
-  return (
-    voices.find((v) => v.lang.replace('_', '-').toLowerCase() === lang.toLowerCase()) ??
-    voices.find((v) => v.lang.toLowerCase().startsWith(want)) ??
-    null
-  );
+/** 取系统里真实存在的音色。Edge/Chrome 的 getVoices 可能异步加载，UI 需监听 voiceschanged。 */
+export function listVoices(lang: SpeakLang): SpeechSynthesisVoice[] {
+  if (!canSpeak()) return [];
+  const want = langKey(lang);
+  return window.speechSynthesis
+    .getVoices()
+    .filter((v) => String(v.lang || '').replace('_', '-').toLowerCase().startsWith(want))
+    .sort((a, b) => {
+      // 本地音色优先（在线音色偶尔会失败），再按名称排
+      if (a.localService !== b.localService) return a.localService ? -1 : 1;
+      return a.name.localeCompare(b.name);
+    });
 }
 
-export function speak(text: string, lang: SpeakLang): boolean {
+/** 把 Microsoft 的长名字压成适合按钮显示的两三个词 */
+export function voiceLabel(voice: SpeechSynthesisVoice): string {
+  const name = voice.name
+    .replace(/^Microsoft\s+/i, '')
+    .replace(/\s*-\s*.*$/, '')
+    .replace(/\s*\((?:Online|Natural|Desktop|Local)[^)]*\)\s*/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return name || voice.name;
+}
+
+/** 粗分男/女，只用于提示，不保证所有系统都准确 */
+export function voiceHint(voice: SpeechSynthesisVoice): string {
+  const n = voice.name.toLowerCase();
+  if (/(yunxi|yunjian|kangkang|guy|david|mark|liang|male)/.test(n)) return '男声';
+  if (/(xiaoxiao|xiaoyi|huihui|yaoyao|aria|jenny|zira|samantha|female)/.test(n)) return '女声';
+  return voice.localService ? '本地' : '在线';
+}
+
+function preferredVoiceNames(lang: SpeakLang): string[] {
+  const key = langKey(lang);
+  if (key === 'zh') return ['xiaoxiao', 'yunxi', 'yunjian', 'xiaoyi', 'huihui', 'yaoyao', 'kangkang'];
+  if (key === 'en') return ['aria', 'guy', 'jenny', 'zira', 'david', 'mark', 'samantha'];
+  return [];
+}
+
+export function loadVoiceUri(lang: SpeakLang): string {
+  try {
+    return localStorage.getItem(VOICE_URI_PREFIX + langKey(lang)) || '';
+  } catch {
+    return '';
+  }
+}
+
+export function saveVoiceUri(lang: SpeakLang, uri: string) {
+  try {
+    if (uri) localStorage.setItem(VOICE_URI_PREFIX + langKey(lang), uri);
+    else localStorage.removeItem(VOICE_URI_PREFIX + langKey(lang));
+  } catch {
+    // 隐私模式写不进去，忽略
+  }
+}
+
+function pickVoice(lang: SpeakLang): SpeechSynthesisVoice | null {
+  const voices = listVoices(lang);
+  const saved = loadVoiceUri(lang);
+  const savedVoice = voices.find((v) => v.voiceURI === saved);
+  if (savedVoice) return savedVoice;
+
+  for (const name of preferredVoiceNames(lang)) {
+    const found = voices.find((v) => v.name.toLowerCase().includes(name));
+    if (found) return found;
+  }
+  return voices[0] ?? null;
+}
+
+/**
+ * 播报。voiceUri 为空时使用「本机保存的音色 → 语言推荐音色 → 系统第一个」。
+ * 传了 voiceUri 则认为用户在音色列表里做了选择，顺手记住。
+ */
+export function speak(text: string, lang: SpeakLang, voiceUri?: string): boolean {
   if (!canSpeak() || !text.trim()) return false;
 
   const synth = window.speechSynthesis;
   synth.cancel();
 
   const preset = voicePreset();
+  const chosen = voiceUri
+    ? listVoices(lang).find((v) => v.voiceURI === voiceUri) ?? null
+    : null;
+  if (chosen) saveVoiceUri(lang, chosen.voiceURI);
+
+  const voice = chosen ?? pickVoice(lang);
 
   const u = new SpeechSynthesisUtterance(text);
   u.lang = lang;
   // 音色给基准，英文再压慢一点，现场念得清
-  u.rate = preset.rate * (lang.toLowerCase().startsWith('en') ? 0.92 : 1);
+  u.rate = preset.rate * (langKey(lang) === 'en' ? 0.92 : 1);
   u.pitch = preset.pitch;
-
-  const voice = pickVoice(lang);
-  if (voice) u.voice = voice;
+  if (voice) {
+    u.voice = voice;
+    // 某些浏览器必须同时设置 lang，否则还是回落到默认嗓子
+    u.lang = voice.lang || lang;
+  }
 
   synth.speak(u);
   return true;
