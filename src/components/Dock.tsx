@@ -64,12 +64,22 @@ interface Box {
   w: number;
 }
 
+type LensPhase = 'idle' | 'stretch' | 'settle';
+
 export function Dock({ value, onChange }: { value: TabKey; onChange: (k: TabKey) => void }) {
   const hostRef = useRef<HTMLElement>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [boxes, setBoxes] = useState<Box[]>([]);
-  const [dragX, setDragX] = useState<number | null>(null);
+  const [lens, setLens] = useState<{ x: number; w: number; phase: LensPhase }>({
+    x: 0,
+    w: 0,
+    phase: 'idle',
+  });
   const [dragging, setDragging] = useState(false);
+  const [dragX, setDragX] = useState(0);
+  const [stretch, setStretch] = useState(0);
+  const lensRef = useRef<{ x: number; w: number }>({ x: 0, w: 0 });
+  const settled = useRef(false);
 
   useEffect(() => {
     const el = hostRef.current;
@@ -101,23 +111,48 @@ export function Dock({ value, onChange }: { value: TabKey; onChange: (k: TabKey)
     0,
     ITEMS.findIndex((i) => i.key === value),
   );
-  const activeBox = boxes[activeIndex];
-  const x = dragX ?? activeBox?.x ?? 0;
-  const w = activeBox?.w ?? 0;
 
-  // 按住横向拖动，1:1 跟手；松手按当前中心加一点速度投影，落到最近的一项
+  // 切换时：先拉成「旧位置到新位置」的并集，再收缩落位 —— 就是 QQ 那种被拽过去的弹性
+  useEffect(() => {
+    if (!boxes.length || dragging) return;
+    const to = boxes[activeIndex];
+    if (!to) return;
+
+    if (!settled.current) {
+      setLens({ ...to, phase: 'idle' });
+      lensRef.current = to;
+      settled.current = true;
+      return;
+    }
+
+    const from = lensRef.current;
+    if (Math.abs(from.x - to.x) < 1 && Math.abs(from.w - to.w) < 1) return;
+
+    const unionX = Math.min(from.x, to.x);
+    const unionW = Math.max(from.x + from.w, to.x + to.w) - unionX;
+
+    setLens({ x: unionX, w: unionW, phase: 'stretch' });
+
+    const timer = window.setTimeout(() => {
+      setLens({ ...to, phase: 'settle' });
+      lensRef.current = to;
+    }, 130);
+
+    return () => window.clearTimeout(timer);
+  }, [value, boxes, activeIndex, dragging]);
+
   function onPointerDown(e: ReactPointerEvent) {
     if (boxes.length === 0 || e.button !== 0) return;
 
     const startX = e.clientX;
     const base = boxes[activeIndex].x;
+    const width = boxes[activeIndex].w;
     const min = boxes[0].x;
     const max = boxes[boxes.length - 1].x;
     let currentX = base;
     let moved = false;
     let lastX = e.clientX;
     let lastT = performance.now();
-    let velocity = 0;
 
     const move = (ev: PointerEvent) => {
       const dx = ev.clientX - startX;
@@ -127,34 +162,32 @@ export function Dock({ value, onChange }: { value: TabKey; onChange: (k: TabKey)
 
       const now = performance.now();
       const dt = Math.max(8, now - lastT);
-      velocity = ((ev.clientX - lastX) / dt) * 1000;
+      const v = ((ev.clientX - lastX) / dt) * 1000; // px/s
       lastX = ev.clientX;
       lastT = now;
 
       currentX = Math.min(max, Math.max(min, base + dx));
       setDragX(currentX);
+      // 拖得越快，指条在水平方向拉得越长，垂直方向压扁一点
+      setStretch(Math.min(0.22, Math.abs(v) / 3600));
     };
 
-    const up = () => {
+    const finish = () => {
       window.removeEventListener('pointermove', move);
-      window.removeEventListener('pointerup', up);
-      window.removeEventListener('pointercancel', up);
+      window.removeEventListener('pointerup', finish);
+      window.removeEventListener('pointercancel', finish);
 
       if (!moved) {
-        setDragX(null);
         setDragging(false);
+        setStretch(0);
         return;
       }
 
-      const halfW = boxes[activeIndex].w / 2;
-      // 速度只做一点暗示，别让轻轻一划就飞过两格
-      const drift = Math.max(-56, Math.min(56, velocity * 0.05));
-      const projectedCenter = currentX + halfW + drift;
-
+      const halfW = width / 2;
       let best = activeIndex;
       let bestDist = Infinity;
       boxes.forEach((b, i) => {
-        const d = Math.abs(b.x + b.w / 2 - projectedCenter);
+        const d = Math.abs(b.x + b.w / 2 - (currentX + halfW));
         if (d < bestDist) {
           bestDist = d;
           best = i;
@@ -162,22 +195,37 @@ export function Dock({ value, onChange }: { value: TabKey; onChange: (k: TabKey)
       });
 
       setDragging(false);
-      setDragX(null);
+      setStretch(0);
+      lensRef.current = { x: currentX, w: width };
+      setLens({ x: currentX, w: width, phase: 'idle' });
+
       if (ITEMS[best].key !== value) onChange(ITEMS[best].key);
+      // 没换项时交给上面的 effect 做回弹，别在这里再排一次动画
     };
 
     window.addEventListener('pointermove', move);
-    window.addEventListener('pointerup', up);
-    window.addEventListener('pointercancel', up);
+    window.addEventListener('pointerup', finish);
+    window.addEventListener('pointercancel', finish);
   }
+
+  const duration = lens.phase === 'stretch' ? 130 : lens.phase === 'settle' ? 560 : 0;
+  const easing = lens.phase === 'settle' ? 'cubic-bezier(.16,1.35,.36,1)' : 'cubic-bezier(.3,.9,.3,1)';
+
+  const style = dragging
+    ? {
+        transform: `translateX(${dragX}px) scale(${1 + stretch}, ${1 - stretch * 0.45})`,
+        width: boxes[activeIndex]?.w ?? 0,
+        transition: 'none',
+      }
+    : {
+        transform: `translateX(${lens.x}px)`,
+        width: lens.w || undefined,
+        transition: `transform ${duration}ms ${easing}, width ${duration}ms ${easing}`,
+      };
 
   return (
     <nav className="dock" ref={hostRef} aria-label="主导航" onPointerDown={onPointerDown}>
-      <span
-        className={`dock-lens${dragging ? ' is-drag' : ''}`}
-        style={{ transform: `translateX(${x}px)`, width: w || undefined }}
-        aria-hidden="true"
-      />
+      <span className={`dock-lens${dragging ? ' is-drag' : ''}`} style={style} aria-hidden="true" />
       {ITEMS.map((it, i) => (
         <button
           key={it.key}
