@@ -123,8 +123,17 @@ export function ResultCard({
                 {p.law}
                 {p.article && <span> {p.article}</span>}
               </p>
-              <p className="r-topic">{p.topic}</p>
+              <p className="r-topic">
+                {p.topic}
+                {p.status && <span className="r-status">{p.status}</span>}
+              </p>
               <p className="r-sum">{p.summary}</p>
+              {p.text && (
+                <details className="r-orig">
+                  <summary>查看条文原文</summary>
+                  <p>{p.text}</p>
+                </details>
+              )}
             </li>
           ))}
         </ul>

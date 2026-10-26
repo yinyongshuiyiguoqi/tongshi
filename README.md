@@ -84,7 +84,7 @@ npm run build    # 产物在 dist/
 ```
 浏览器 (React)  ──POST /api/analyse──▶  Node Agent (server/agent.mjs)
                                           │
-                                          ├─▶ 元典 law_vector_search（检索现行法条）
+                                          ├─▶ 法条检索：本地法条库 / 元典 law_vector_search
                                           └─▶ 大模型（DeepSeek / Claude / 通义，可切）
 ```
 
@@ -108,7 +108,9 @@ LLM_BASE=https://api.deepseek.com
 LLM_MODEL=deepseek-chat
 ```
 
-没配 key 也能跑：检索返回示例数据、回答走模板，界面会明确标注，链路本身是通的。
+`LAW_API_KEY` 可以留空。留空时检索走**本地法条库**（`src/data/statutes.json`），
+条文原文逐条对照中国人大网、国家移民管理局公布的现行文本核过，前端情形库和它共用同一个
+id，改条号只改一处。两个 key 都不配也能跑：检索走本地库、回答走模板，链路本身是通的。
 
 ### 为什么不用 Hermes / OpenClaw 当外壳
 
@@ -116,26 +118,21 @@ LLM_MODEL=deepseek-chat
 就没有「在线演示」了。同样的 Agent 逻辑用 90 行 Node 写在 `server/agent.mjs` 里，
 评委打开网址就能用，也更容易写进技术文档。
 
-## 接法规检索（可选，但强烈建议）
+## 法规检索：本地库 / 元典
 
-情形库没命中时，光靠模型容易编条款。接一层真实法规检索能解决这个问题：
+情形库没命中时，光靠模型容易编条款，所以模型被强制先检索再作答。
 
-`.env.local` 里加
+**默认走本地法条库**：`src/data/statutes.json` 收了涉外执法最常用的 13 条，
+每条形文都是原文，注明现行有效、效力级别和出处链接。检索按关键词命中排序，
+搜索范围限定在这一份语料内——模型只能在核过的条文里说话，编不出内容。
 
-```
-VITE_LAW_API_KEY=你的元典开放平台 Key
-```
+要扩到全库检索，填 `.env.local` 里的 `LAW_API_KEY` 即可，走元典开放平台
+（open.chineselaw.com）的 `law_vector_search`，按自然语言检索、只取「现行有效」的条目。
+两种来源的返回结构相同，前端不用改；`/api/health` 的 `law` 字段会显示当前是
+`local` 还是 `api`。
 
-用的是元典开放平台（open.chineselaw.com）的 `law_vector_search`，按自然语言检索法条，
-只取「现行有效」的条目，返回法规名称、条号、效力级别和时效性。检索结果会：
-
-1. 直接显示在结果卡里，作为「检索到的依据」
-2. 作为提示词上下文喂给模型，模型只能在这些条目范围内说话
-
-没有配 key 时自动跳过这一步，退回本地要点。
-
-**注意**：浏览器直连可能被 CORS 拦。真被拦了，加一层 Vercel Function 转发即可
-（`/api/law` → 元典地址），前端改成调自己的域名。这一步需要部署后才能验证。
+**这条路径的取舍写进了技术文档**：本地库保证确定性和可核验，代价是覆盖面有限；
+元典补覆盖面，代价是依赖外部服务与积分。演示时默认走本地库，断网也不会塌。
 
 ## 接真模型
 
@@ -159,7 +156,7 @@ npm run dev
 
 ```
 server/
-  agent.mjs            Agent 循环 + 登录鉴权 + 元典检索
+  agent.mjs            Agent 循环 + 登录鉴权 + 法条检索
 src/
   App.tsx              会话切换（登录 / 工作台）
   components/
@@ -168,7 +165,8 @@ src/
     ResultCard.tsx     匹配结果卡（复制中/英文、打印）
     AiFallback.tsx     未命中时的 Agent 研判
     Empty.tsx          空状态：流程说明、情形清单、最近记录
-  data/cases.ts        情形库 + 法条（★ 条号待核）
+  data/statutes.json   法条库：原文 + 关键词 + 出处（前后端共用）
+  data/cases.ts        情形库（依据 id 指向 statutes.json）
   lib/match.ts         匹配算法
   lib/agent.ts         Agent 客户端（SSE）
   lib/legal.ts         元典检索（浏览器直连兜底）

@@ -23,6 +23,11 @@ import path from 'node:path';
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const PORT = Number(process.env.AGENT_PORT || 8787);
 
+// ── 本地法条库 ──────────────────────────────────────────────
+// 与前端情形库共用同一份数据，条号逐条对照国家法律法规数据库核过。
+// 有元典 key 时走在线检索，没有时退回这里，链路不空转、也不编造条文。
+const STATUTES = JSON.parse(readFileSync(path.join(ROOT, 'src/data/statutes.json'), 'utf8'));
+
 // ── 读 .env.local ────────────────────────────────────────────
 function loadEnv() {
   const file = path.join(ROOT, '.env.local');
@@ -41,7 +46,7 @@ const LLM_MODEL = process.env.LLM_MODEL || 'deepseek-chat';
 
 // ── 工具：元典法条检索 ──────────────────────────────────────
 async function searchLaw(query, limit = 6) {
-  if (!LAW_KEY) return { mock: true, articles: mockArticles(query) };
+  if (!LAW_KEY) return localSearch(query, Math.min(limit, 4));
 
   const res = await fetch('https://open.chineselaw.com/open/law_vector_search', {
     method: 'POST',
@@ -77,27 +82,33 @@ async function searchLaw(query, limit = 6) {
   };
 }
 
-function mockArticles(query) {
-  return [
-    {
-      id: 'mock-1',
-      law: '中华人民共和国出境入境管理法',
-      num: '第三十九条',
-      content:
-        '（示例数据，未接入检索）外国人在旅馆以外住所居住或住宿的，应当在入住后二十四小时内由本人或者留宿人，向居住地公安机关办理登记。',
-      status: '现行有效',
-      level: '法律',
-    },
-    {
-      id: 'mock-2',
-      law: '中华人民共和国人民警察法',
-      num: '第九条',
-      content:
-        '（示例数据，未接入检索）为维护社会治安秩序，对有违法犯罪嫌疑的人员，经出示相应证件，可以当场盘问、检查。',
-      status: '现行有效',
-      level: '法律',
-    },
-  ];
+/** 本地法条检索：关键词命中为主，主题字面重合为辅 */
+function localSearch(query, limit = 4) {
+  const q = String(query || '');
+
+  const scored = STATUTES.map((s) => {
+    let hit = 0;
+    for (const k of s.keywords) if (q.includes(k)) hit += 1 + k.length / 4;
+    let shared = 0;
+    for (const ch of new Set(q)) if (s.topic.includes(ch)) shared += 0.2;
+    return { s, score: hit * 2 + shared };
+  })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit);
+
+  return {
+    mock: false,
+    local: true,
+    articles: scored.map(({ s }) => ({
+      id: s.id,
+      law: s.law,
+      num: s.article,
+      content: s.text || s.gist,
+      status: s.status,
+      level: s.level,
+    })),
+  };
 }
 
 // ── 工具定义（OpenAI 兼容 function calling）──────────────────
@@ -197,8 +208,8 @@ async function runAgent(input, emit) {
   if (!LLM_KEY) {
     // 无模型 key：仍然走一次真实检索，用模板组织回答，链路不空转
     emit({ type: 'step', name: '检索法规' });
-    const { articles, mock } = await searchLaw(input);
-    emit({ type: 'tool', name: 'search_law', articles, mock });
+    const { articles, mock, local } = await searchLaw(input);
+    emit({ type: 'tool', name: 'search_law', articles, mock, local });
     emit({ type: 'step', name: '组织研判' });
 
     const list = articles.map((a) => `《${a.law}》${a.num}`).join('、');
@@ -230,8 +241,8 @@ async function runAgent(input, emit) {
       const query = args.query || input;
 
       emit({ type: 'step', name: '检索法规', detail: query });
-      const { articles, mock } = await searchLaw(query);
-      emit({ type: 'tool', name: 'search_law', query, articles, mock });
+      const { articles, mock, local } = await searchLaw(query);
+      emit({ type: 'tool', name: 'search_law', query, articles, mock, local });
 
       messages.push({
         role: 'tool',
@@ -302,7 +313,8 @@ const server = http.createServer(async (req, res) => {
     res.end(
       JSON.stringify({
         ok: true,
-        law: Boolean(LAW_KEY),
+        law: LAW_KEY ? 'api' : 'local',
+        corpus: STATUTES.length,
         llm: Boolean(LLM_KEY),
         model: LLM_KEY ? LLM_MODEL : null,
       }),
@@ -376,6 +388,6 @@ const server = http.createServer(async (req, res) => {
 
 server.listen(PORT, () => {
   console.log(`通事 agent 已启动 → http://localhost:${PORT}`);
-  console.log(`  法规检索: ${LAW_KEY ? '已配置' : '未配置（示例数据）'}`);
+  console.log(`  法规检索: ${LAW_KEY ? '元典在线检索' : `本地法条库（${STATUTES.length} 条，已核验）`}`);
   console.log(`  模型:     ${LLM_KEY ? LLM_MODEL : '未配置（模板输出）'}`);
 });

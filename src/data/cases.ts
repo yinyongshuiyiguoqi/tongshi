@@ -4,16 +4,24 @@
  * 这是匹配引擎的底座：每条情形有触发描述、关键词、处置步骤、依据、话术。
  * 用户输入什么，就落到哪一条上。
  *
- * 注意：provisions 的 summary 是要点摘录，不是条文原文；条号须对照现行文本核对。
- * 正式版应替换为经校验的法规库，并可在此结构上加入向量。
+ * 法条原文放在 statutes.json，逐条对照国家法律法规数据库、中国人大网核对过，
+ * 与情形库共用 id。改条号只改那一处，两边同时生效。
  */
+
+import statutes from './statutes.json';
 
 export interface Provision {
   id: string;
   law: string;
   article: string;
   topic: string;
+  /** 要点摘录，用于卡片展示 */
   summary: string;
+  /** 条文原文，逐字核对 */
+  text: string;
+  status: string;
+  level: string;
+  source: string;
 }
 
 export interface CaseItem {
@@ -34,56 +42,17 @@ export interface CaseItem {
   followUp: string;
 }
 
-export const PROVISIONS: Provision[] = [
-  {
-    id: 'p-jc9',
-    law: '中华人民共和国人民警察法',
-    article: '第九条',
-    topic: '当场盘问、检查',
-    summary:
-      '为维护社会治安秩序，对有违法犯罪嫌疑的人员，经出示相应证件，可以当场盘问、检查；符合法定情形的，可以带至公安机关继续盘问。',
-  },
-  {
-    id: 'p-crj39',
-    law: '中华人民共和国出境入境管理法',
-    article: '第三十九条',
-    topic: '外国人住宿登记',
-    summary:
-      '外国人在旅馆以外住所居住或住宿的，应当在入住后二十四小时内由本人或者留宿人，向居住地公安机关办理登记；在旅馆住宿的，由旅馆按规定登记并报送信息。',
-  },
-  {
-    id: 'p-crj71',
-    law: '中华人民共和国出境入境管理法',
-    article: '第七十一条',
-    topic: '非法居留的处理',
-    summary:
-      '外国人非法居留的，依法给予警告、罚款；情节严重的可以拘留，具体幅度依本条及裁量基准确定。查处核心事实是停留期限与证件有效性。',
-  },
-  {
-    id: 'p-za4',
-    law: '中华人民共和国治安管理处罚法',
-    article: '第四条',
-    topic: '涉外适用',
-    summary:
-      '在我国领域内发生的违反治安管理行为，除法律有特别规定的外，适用本法；享有外交特权和豁免权的外国人，通过外交途径解决。',
-  },
-  {
-    id: 'p-za15',
-    law: '中华人民共和国治安管理处罚法',
-    article: '第十五条',
-    topic: '醉酒状态的处置',
-    summary:
-      '醉酒的人违反治安管理的，应当给予处罚；醉酒状态中对本人有危险或者对他人人身、财产、公共安全有威胁的，可以采取保护性约束措施至酒醒。',
-  },
-  {
-    id: 'p-wj',
-    law: '中华人民共和国外交特权与豁免条例',
-    article: '',
-    topic: '外交特权与豁免',
-    summary:
-      '享有外交特权与豁免的人员，其人身、寓所、文书档案不受侵犯，管辖与执行豁免；涉及其的案件应通过外交途径处理，不适用一般治安处罚程序。',
-  },
-];
+export const PROVISIONS: Provision[] = statutes.map((s) => ({
+  id: s.id,
+  law: s.law,
+  article: s.article,
+  topic: s.topic,
+  summary: s.gist,
+  text: s.text,
+  status: s.status,
+  level: s.level,
+  source: s.source,
+}));
 
 export const CASES: CaseItem[] = [
   {
@@ -111,7 +80,7 @@ export const CASES: CaseItem[] = [
       '通过出入境管理系统核对身份信息与停留事由',
       '能够核实且无其他违法情形的，说明情况后放行；无法核实的，依法带至公安机关继续盘问',
     ],
-    provisionIds: ['p-jc9', 'p-za4'],
+    provisionIds: ['crj-38', 'jc-9'],
     scripts: [
       {
         zh: '您好，我是执勤民警。请出示您的护照或有效身份证件；如果没带原件，请先提供护照照片和签证信息，我们需要核实您的身份和停留事由。',
@@ -153,7 +122,7 @@ export const CASES: CaseItem[] = [
       '责令补办登记，登记完成后一般不再作处罚',
       '留存护照信息、住址与联系方式，录入系统',
     ],
-    provisionIds: ['p-crj39', 'p-crj71'],
+    provisionIds: ['crj-39', 'crj-76'],
     scripts: [
       {
         zh: '根据规定，外国人在旅馆以外的住所居住，需要在入住后二十四小时内到居住地公安机关办理住宿登记。您现在的住址还没有登记，我们需要为您补办。',
@@ -190,7 +159,7 @@ export const CASES: CaseItem[] = [
       '固定证据：证件复印件、出入境记录、询问笔录',
       '依裁量基准确定处罚幅度，并依法作出限期离境或者遣送出境的处理',
     ],
-    provisionIds: ['p-crj71', 'p-za4'],
+    provisionIds: ['crj-78', 'crj-81', 'za-10'],
     scripts: [
       {
         zh: '您的签证已超过允许停留的期限。我们需要核对您的出入境记录，请您配合说明超期原因，并出示相关证明材料。',
@@ -228,7 +197,7 @@ export const CASES: CaseItem[] = [
       '区分受雇方与用工单位的责任，两者分别处理',
       '依法作出处理，并通报人社、市场监管部门',
     ],
-    provisionIds: ['p-crj71', 'p-za4'],
+    provisionIds: ['crj-43', 'crj-80'],
     scripts: [
       {
         zh: '您目前持有的签证不允许在中国境内工作。请说明您在这里从事的具体工作和报酬情况，我们需要核实。',
@@ -265,7 +234,7 @@ export const CASES: CaseItem[] = [
       '查看伤情，需要验伤的送医并固定证据',
       '双方自愿的可以组织调解；调解不成或伤情较重的，依法受案',
     ],
-    provisionIds: ['p-za4', 'p-jc9'],
+    provisionIds: ['za-5', 'za-9'],
     scripts: [
       {
         zh: '请两位先分开，各自说明情况。我们现在分别记录，不会只听一方。',
@@ -305,7 +274,7 @@ export const CASES: CaseItem[] = [
       '核查身份与证件，联系同行人员或者使领馆',
       '酒醒后依法处理，全程录音录像并制作记录',
     ],
-    provisionIds: ['p-za15', 'p-za4'],
+    provisionIds: ['za-15', 'za-10'],
     scripts: [
       {
         zh: '您现在处于醉酒状态，为了您和他人的安全，我们需要对您采取保护性措施，等您清醒后再处理相关事项。',
@@ -340,7 +309,7 @@ export const CASES: CaseItem[] = [
       '逐级上报，通报外事部门，通过外交途径处理',
       '做好现场记录，全程留痕，避免与外方发生直接冲突',
     ],
-    provisionIds: ['p-wj', 'p-za4'],
+    provisionIds: ['wj', 'za-10'],
     scripts: [
       {
         zh: '我们需要先核实您的身份。请出示外交身份证件，我们将通过外事部门确认后依法处理。',
@@ -384,7 +353,7 @@ export const CASES: CaseItem[] = [
       '属求助的，提供指引或协助联系；属财物丢失的，按程序受理并出具证明',
       '涉及使领馆协助的，告知其联系本国驻华使领馆',
     ],
-    provisionIds: ['p-jc9'],
+    provisionIds: ['jc-9'],
     scripts: [
       {
         zh: '请问您需要什么帮助？请慢慢说，我们会尽力协助。',
@@ -421,7 +390,7 @@ export const CASES: CaseItem[] = [
       '通知交警部门到场处理，涉外的同时报告出入境管理部门',
       '核查当事人身份、证件与车辆手续，固定现场证据',
     ],
-    provisionIds: ['p-jc9', 'p-za4'],
+    provisionIds: ['jc-9'],
     scripts: [
       {
         zh: '请先不要移动车辆，我们正在保护现场。有人员受伤吗？请出示您的驾驶证和护照。',
@@ -459,7 +428,7 @@ export const CASES: CaseItem[] = [
       '按涉案金额与次数判断是治安案件还是刑事案件，分别受案',
       '依法处理，视情通报出入境管理部门与当事人国籍国使领馆',
     ],
-    provisionIds: ['p-za4', 'p-jc9'],
+    provisionIds: ['za-5', 'jc-9'],
     scripts: [
       {
         zh: '请您配合我们核实情况。商品和监控记录我们先固定下来，稍后需要您说明经过。',

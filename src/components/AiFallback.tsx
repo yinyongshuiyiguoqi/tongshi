@@ -10,7 +10,7 @@ export function AiFallback({ input, token }: { input: string; token: string }) {
   const [articles, setArticles] = useState<LawArticle[]>([]);
   const [steps, setSteps] = useState<string[]>([]);
   const [viaAgent, setViaAgent] = useState(false);
-  const [mockData, setMockData] = useState(false);
+  const [localLaw, setLocalLaw] = useState(false);
   const [lawState, setLawState] = useState<'off' | 'ok' | 'error'>(
     hasLawApi ? 'ok' : 'off',
   );
@@ -21,7 +21,7 @@ export function AiFallback({ input, token }: { input: string; token: string }) {
     setArticles([]);
     setSteps([]);
     setViaAgent(false);
-    setMockData(false);
+    setLocalLaw(false);
 
     let cancelled = false;
     const ac = new AbortController();
@@ -43,7 +43,7 @@ export function AiFallback({ input, token }: { input: string; token: string }) {
                 break;
               case 'tool':
                 setArticles(e.articles);
-                setMockData(Boolean(e.mock));
+                setLocalLaw(Boolean(e.local));
                 break;
               case 'delta':
                 setText((t) => t + e.text);
@@ -132,9 +132,10 @@ export function AiFallback({ input, token }: { input: string; token: string }) {
         </ol>
       )}
 
-      {mockData && (
-        <p className="low-warn">
-          当前未配置法规检索 key，下方依据为示例数据，不能作为执法参考。
+      {localLaw && articles.length > 0 && (
+        <p className="advice dim">
+          依据取自本地法条库，条文原文已对照国家法律法规数据库核验；配置法规检索
+          key 后可扩展到全库检索。
         </p>
       )}
 

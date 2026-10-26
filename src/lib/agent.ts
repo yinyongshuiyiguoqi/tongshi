@@ -11,7 +11,14 @@ import type { LawArticle } from './legal';
 
 export type AgentEvent =
   | { type: 'step'; name: string; detail?: string }
-  | { type: 'tool'; name: string; query?: string; articles: LawArticle[]; mock?: boolean }
+  | {
+      type: 'tool';
+      name: string;
+      query?: string;
+      articles: LawArticle[];
+      mock?: boolean;
+      local?: boolean;
+    }
   | { type: 'delta'; text: string }
   | { type: 'done'; mock?: boolean }
   | { type: 'error'; message: string };
