@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { CASES, provisionById, type CaseItem } from './data/cases';
 import { LOW_CONFIDENCE, matchCases, type MatchResult } from './lib/match';
 import { hasLLM, streamAnalyse, streamGeneral } from './lib/ai';
+import { hasLawApi, searchLaw, type LawArticle } from './lib/legal';
 
 const SESSION_KEY = 'tongshi.session';
 
@@ -477,22 +478,59 @@ function ResultCard({
 function AiFallback({ input }: { input: string }) {
   const [text, setText] = useState('');
   const [done, setDone] = useState(false);
+  const [articles, setArticles] = useState<LawArticle[]>([]);
+  const [lawState, setLawState] = useState<'off' | 'loading' | 'ok' | 'error'>(
+    hasLawApi ? 'loading' : 'off',
+  );
 
   useEffect(() => {
     setText('');
     setDone(false);
-    if (!hasLLM) return;
+    setArticles([]);
+    setLawState(hasLawApi ? 'loading' : 'off');
 
+    let cancelled = false;
     const ac = new AbortController();
-    streamGeneral(
-      input,
-      (d) => setText((t) => t + d),
-      ac.signal,
-    )
-      .then(() => setDone(true))
-      .catch(() => setDone(true));
 
-    return () => ac.abort();
+    (async () => {
+      // 先检索真法条，再让模型只在检索结果里说话
+      let found: LawArticle[] = [];
+      if (hasLawApi) {
+        try {
+          found = await searchLaw(input);
+          if (!cancelled) {
+            setArticles(found);
+            setLawState('ok');
+          }
+        } catch {
+          if (!cancelled) setLawState('error');
+        }
+      }
+
+      if (cancelled || !hasLLM) {
+        if (!cancelled) setDone(true);
+        return;
+      }
+
+      try {
+        await streamGeneral(
+          input,
+          found,
+          (d) => {
+            if (!cancelled) setText((t) => t + d);
+          },
+          ac.signal,
+        );
+      } catch {
+        // 失败就停在空态，由下方提示兜底
+      }
+      if (!cancelled) setDone(true);
+    })();
+
+    return () => {
+      cancelled = true;
+      ac.abort();
+    };
   }, [input]);
 
   return (
@@ -511,9 +549,35 @@ function AiFallback({ input }: { input: string }) {
         </p>
       ) : (
         <p className="advice dim">
-          当前未配置模型 key，只能匹配情形库里的 {CASES.length} 类情形。配置后，任意描述都会由模型
-          在法规要点范围内给出研判。
+          {articles.length > 0
+            ? `已检索到 ${articles.length} 条现行法条，但未配置模型 key，无法生成研判。`
+            : `当前未配置模型 key，只能匹配情形库里的 ${CASES.length} 类情形。配置后，任意描述都会由模型在检索到的法条范围内给出研判。`}
         </p>
+      )}
+
+      {lawState === 'error' && (
+        <p className="low-warn">
+          法规检索接口调用失败，本次研判只依据本地要点。请人工核对条款时效与表述。
+        </p>
+      )}
+
+      {articles.length > 0 && (
+        <>
+          <h3>检索到的依据（{articles.length} 条 · 现行有效）</h3>
+          <ul className="provisions">
+            {articles.map((a) => (
+              <li key={a.id}>
+                <p className="p-law">
+                  《{a.law}》<span>{a.num}</span>
+                </p>
+                <p className="p-topic">
+                  {a.level} · {a.status}
+                </p>
+                <p className="p-sum">{a.content}</p>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
 
       <p className="risk">

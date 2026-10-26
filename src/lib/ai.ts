@@ -1,4 +1,5 @@
 import { PROVISIONS, provisionById, type CaseItem } from '../data/cases';
+import type { LawArticle } from './legal';
 
 /**
  * 大模型接入层。
@@ -65,10 +66,16 @@ export function buildMessages(item: CaseItem, input: string): ChatMessage[] {
  * 注意这里仍然把法规库整体喂进去：模型只能在这些条目范围内说话，
  * 不允许凭空生成法名、条号、数额。输出在界面上标为「未经情形库校验」。
  */
-export function buildGeneralMessages(input: string): ChatMessage[] {
-  const basis = PROVISIONS.map(
-    (p) => `- ${p.law}${p.article}（${p.topic}）：${p.summary}`,
-  ).join('\n');
+export function buildGeneralMessages(input: string, articles: LawArticle[] = []): ChatMessage[] {
+  // 有检索结果就用检索结果，那才是真依据；没有就退回本地要点，保证还能跑
+  const basis = articles.length
+    ? articles
+        .map(
+          (a) =>
+            `- 《${a.law}》${a.num}（${a.level}·${a.status}）：${a.content.replace(/\s+/g, ' ').slice(0, 180)}`,
+        )
+        .join('\n')
+    : PROVISIONS.map((p) => `- ${p.law}${p.article}（${p.topic}）：${p.summary}`).join('\n');
 
   return [
     {
@@ -91,10 +98,11 @@ export function buildGeneralMessages(input: string): ChatMessage[] {
 
 export async function streamGeneral(
   input: string,
+  articles: LawArticle[],
   onDelta: (text: string) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  return streamChat(buildGeneralMessages(input), onDelta, signal);
+  return streamChat(buildGeneralMessages(input, articles), onDelta, signal);
 }
 
 export async function streamAnalyse(
