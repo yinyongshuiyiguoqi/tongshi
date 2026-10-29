@@ -1,0 +1,1572 @@
+/* ───────── 通事开机动画：整块液态玻璃 ───────── */
+
+/* 自托管 Inter Display：Apple 设备优先用 SF Pro/PingFang，
+   Windows/Android 用这套字形接住，避免回落到普通 Segoe/微软雅黑后失去高级感。 */
+@font-face {
+  font-family: 'Tongshi Inter';
+  src: url('/fonts/inter-latin.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+@font-face {
+  font-family: 'Tongshi Inter';
+  src: url('/fonts/inter-latin-ext.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C4, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+@font-face {
+  font-family: 'Tongshi Inter';
+  src: url('/fonts/inter-cyrillic.woff2') format('woff2');
+  font-style: normal;
+  font-weight: 400 600;
+  font-display: swap;
+  unicode-range: U+0301, U+0400-045F, U+0490-0491, U+04B0-04B1, U+2116;
+}
+
+
+
+/* 开机动画是一块不透明的独立画面，不是压在页面上的玻璃：
+   下面的登录页/工作台在动画结束前一律不显示。 */
+.boot-splash {
+  position: fixed;
+  inset: 0;
+  height: 100dvh;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  isolation: isolate;
+  background:
+    radial-gradient(ellipse at 32% 30%, rgba(21, 93, 112, 0.22), transparent 56%),
+    radial-gradient(ellipse at 72% 72%, rgba(45, 60, 132, 0.20), transparent 58%),
+    #03060b;
+  color: #f7fbff;
+  cursor: pointer;
+  touch-action: none;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  --boot-mx: 0;
+  --boot-my: 0;
+  --boot-tap-x: 50%;
+  --boot-tap-y: 50%;
+  /* 蓄力姿态：运镜第一帧要严丝合缝接住它，所以用变量共享 */
+  --boot-c-ty: 9px;
+  --boot-c-s: 0.86;
+  --boot-lens-hold: 0.84;
+  --boot-font-display: "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Tongshi Inter", "Segoe UI Variable Display", "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --boot-font-cjk: "PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Source Han Sans SC", "Microsoft YaHei", var(--boot-font-display);
+  will-change: transform, opacity;
+}
+
+/* 开机期间页面已经挂载（预加载资源）但完全不可见。
+   运镜开始时页面在开机层下面显示出来，随开机层推近、淡出而化入；
+   动画结束再撤掉开机层，全程没有单独的三段式淡入。 */
+.app-shell {
+  visibility: hidden;
+  opacity: 0;
+}
+
+.app-shell.is-entering,
+.app-shell.is-live {
+  visibility: visible;
+  opacity: 1;
+}
+
+.boot-aurora {
+  position: absolute;
+  inset: -16%;
+  z-index: -1;
+  filter: blur(48px);
+  opacity: 0.72;
+  pointer-events: none;
+}
+
+.boot-blob {
+  position: absolute;
+  display: block;
+  border-radius: 50%;
+  animation: boot-aurora-drift 18s ease-in-out infinite alternate;
+}
+
+.boot-blob.b1 {
+  width: 64vmax;
+  height: 58vmax;
+  left: -8%;
+  top: 5%;
+  background: rgba(32, 113, 138, 0.54);
+}
+
+.boot-blob.b2 {
+  width: 56vmax;
+  height: 56vmax;
+  right: -10%;
+  top: 18%;
+  background: rgba(55, 67, 157, 0.46);
+  animation-delay: -6s;
+  animation-duration: 21s;
+}
+
+.boot-blob.b3 {
+  width: 48vmax;
+  height: 42vmax;
+  right: 10%;
+  bottom: -12%;
+  background: rgba(40, 130, 106, 0.34);
+  animation-delay: -11s;
+  animation-duration: 25s;
+}
+
+/* 一整块液态玻璃：不切成卡片，只留极细的内部折面和边缘光 */
+.boot-glass {
+  position: absolute;
+  inset: max(8px, env(safe-area-inset-top)) max(8px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(8px, env(safe-area-inset-left));
+  border-radius: clamp(28px, 5.2vw, 64px);
+  overflow: hidden;
+  background:
+    linear-gradient(133deg, rgba(255, 255, 255, 0.16) 0%, rgba(255, 255, 255, 0.055) 29%, rgba(193, 228, 255, 0.09) 57%, rgba(160, 183, 255, 0.05) 78%, rgba(255, 255, 255, 0.10) 100%),
+    radial-gradient(ellipse at 35% 20%, rgba(231, 249, 255, 0.12), transparent 52%),
+    rgba(8, 16, 26, 0.28);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -1px 0 rgba(255, 255, 255, 0.08),
+    inset 18px 20px 46px rgba(255, 255, 255, 0.04),
+    inset -28px -34px 68px rgba(1, 7, 14, 0.18),
+    0 32px 120px -36px rgba(0, 8, 18, 0.86);
+  /* 用渐变模拟毛玻璃，避免全屏 backdrop-filter 掉帧 */
+  transform: translate3d(calc(var(--boot-mx) * -6px), calc(var(--boot-my) * -5px), 0);
+  transition: opacity 0.9s ease, transform 0.4s ease-out;
+  animation: boot-glass-in 1.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  will-change: transform, opacity;
+}
+
+.boot-glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    linear-gradient(116deg, rgba(255, 255, 255, 0.16), transparent 22%),
+    linear-gradient(300deg, rgba(154, 217, 255, 0.08), transparent 34%);
+  pointer-events: none;
+}
+
+.boot-glass::after {
+  content: '';
+  position: absolute;
+  inset: 1px;
+  border-radius: calc(clamp(28px, 5.2vw, 64px) - 1px);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  pointer-events: none;
+}
+
+.boot-glass-sheen {
+  position: absolute;
+  left: -28%;
+  top: -42%;
+  width: 68%;
+  height: 180%;
+  transform: rotate(22deg);
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.13), rgba(155, 229, 255, 0.08), transparent);
+  opacity: 0.65;
+  animation: boot-glass-sheen 8s ease-in-out infinite;
+  pointer-events: none;
+}
+
+.boot-glass-edge {
+  position: absolute;
+  inset: 6%;
+  border-radius: clamp(22px, 4.4vw, 54px);
+  border: 1px solid rgba(255, 255, 255, 0.055);
+  pointer-events: none;
+}
+
+/* 大面积玻璃的折面：只做弧线，不切碎画面 */
+.boot-seam {
+  position: absolute;
+  left: -18%;
+  width: 136%;
+  height: 34%;
+  border: 1px solid rgba(255, 255, 255, 0.085);
+  border-radius: 48% 52% 0 0 / 92% 96% 0 0;
+  pointer-events: none;
+}
+
+.boot-seam.s1 {
+  top: -16%;
+  transform: rotate(-2.2deg);
+}
+
+.boot-seam.s2 {
+  top: 33%;
+  transform: rotate(1.3deg);
+  opacity: 0.72;
+}
+
+.boot-seam.s3 {
+  top: 68%;
+  transform: rotate(-1.1deg);
+  opacity: 0.46;
+}
+
+.boot-center {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: min(82vw, 820px);
+  min-height: 260px;
+  transform: translate3d(calc(var(--boot-mx) * 11px), calc(var(--boot-my) * 9px), 0);
+  transition: transform 0.35s ease-out;
+  pointer-events: none;
+}
+
+.boot-intro,
+.boot-final {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 20px 46px rgba(0, 15, 30, 0.30));
+}
+
+.boot-intro {
+  animation: boot-intro-in 1.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.boot-brand-mark {
+  width: clamp(104px, 14vmin, 168px);
+  height: auto;
+  /* 与 Dock 暗色墨色一致：实心、不透明，用上下高光模拟玻璃压印 */
+  color: #f7fbff;
+  filter:
+    drop-shadow(0 1px 0 rgba(255, 255, 255, 0.46))
+    drop-shadow(0 -1px 0 rgba(0, 17, 33, 0.52))
+    drop-shadow(0 22px 28px rgba(0, 10, 25, 0.28));
+}
+
+.boot-intro-en,
+.boot-final-en {
+  margin-top: 10px;
+  font-family: var(--boot-font-display);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.52em;
+  color: #dce9f5;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.22), 0 -1px 0 rgba(0, 20, 35, 0.38);
+}
+
+.boot-word {
+  position: relative;
+  display: block;
+  width: max-content;
+  max-width: 94vw;
+  margin: 0;
+  white-space: nowrap;
+  text-align: center;
+  font-family: var(--boot-font-display);
+  font-size: clamp(82px, 16vmin, 176px);
+  font-weight: 500;
+  font-optical-sizing: auto;
+  font-feature-settings: "kern" 1, "ss01" 1, "cv05" 1, "cv11" 1;
+  line-height: 0.95;
+  letter-spacing: -0.038em;
+  color: #f7fbff;
+  text-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.56),
+    0 -1px 0 rgba(0, 24, 42, 0.58),
+    0 16px 30px rgba(0, 12, 26, 0.24),
+    0 0 52px rgba(132, 219, 255, 0.14);
+  -webkit-text-stroke: 0.65px rgba(255, 255, 255, 0.20);
+  filter:
+    drop-shadow(0 14px 24px rgba(0, 12, 26, 0.26))
+    drop-shadow(0 0 28px rgba(139, 222, 255, 0.10));
+  animation: boot-word-morph 1.18s cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, opacity;
+  transform-origin: 50% 56%;
+}
+
+/* 不同文字系统用各自最合适的字形，避免用拉丁字体的负字距去套中文/阿拉伯文 */
+.boot-word[lang="zh-CN"],
+.boot-word[lang="ja-JP"] {
+  font-family: var(--boot-font-cjk);
+  letter-spacing: 0.018em;
+  font-weight: 500;
+}
+
+.boot-word[lang="ko-KR"] {
+  font-family: "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", var(--boot-font-cjk);
+  letter-spacing: 0.006em;
+  font-weight: 500;
+}
+
+.boot-word[lang="ar-SA"] {
+  font-family: "SF Arabic", "Geeza Pro", "Noto Sans Arabic", "Segoe UI", var(--boot-font-display);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.10;
+  direction: rtl;
+}
+
+.boot-word[lang="hi-IN"] {
+  font-family: "Kohinoor Devanagari", "Noto Sans Devanagari", "Nirmala UI", var(--boot-font-display);
+  font-weight: 500;
+  letter-spacing: 0;
+  line-height: 1.12;
+}
+
+.boot-final {
+  animation: boot-final-in 1.2s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.boot-final .boot-brand-mark {
+  width: clamp(66px, 8.4vmin, 92px);
+}
+
+.boot-final-name {
+  margin-top: 2px;
+  font-family: var(--boot-font-cjk);
+  font-size: clamp(34px, 4.4vmin, 48px);
+  font-weight: 500;
+  letter-spacing: 0.12em;
+  color: #f7fbff;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.38), 0 -1px 0 rgba(0, 20, 35, 0.36);
+}
+
+.boot-footer {
+  position: absolute;
+  left: 50%;
+  bottom: calc(48px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 3;
+  width: min(78vw, 430px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  text-align: center;
+  pointer-events: none;
+}
+
+.boot-hint {
+  font-family: "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  color: rgba(239, 248, 255, 0.72);
+  opacity: 0;
+  transform: translateY(6px);
+  transition: opacity 0.7s ease, transform 0.7s ease;
+}
+
+.boot-hint.is-ready {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.boot-hint.is-loading {
+  opacity: 0.72;
+  transform: translateY(0);
+}
+
+.boot-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  color: rgba(198, 220, 235, 0.52);
+}
+
+.boot-status i {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: #92e4df;
+  box-shadow: 0 0 10px rgba(114, 227, 222, 0.8);
+  animation: boot-pulse 1.8s ease-in-out infinite;
+}
+
+.boot-progress {
+  position: absolute;
+  left: 50%;
+  bottom: calc(25px + env(safe-area-inset-bottom));
+  transform: translateX(-50%);
+  z-index: 3;
+  width: min(62vw, 300px);
+  height: 1px;
+  background: rgba(255, 255, 255, 0.12);
+  overflow: hidden;
+}
+
+.boot-progress i {
+  display: block;
+  height: 100%;
+  width: 100%;
+  transform-origin: left;
+  background: linear-gradient(90deg, rgba(155, 224, 255, 0.14), rgba(176, 240, 255, 0.82), rgba(192, 181, 255, 0.68));
+  /* 没有真实加载百分比，就不要假装进度：用不定长扫光表示“还在加载” */
+  animation: boot-progress 1.8s ease-in-out infinite;
+}
+
+/* 页面真实就绪后立即淡出，而不是继续走到一个假的 100% */
+.boot-progress.is-ready {
+  opacity: 0;
+  transition: opacity 0.45s ease;
+  pointer-events: none;
+}
+
+@keyframes boot-glass-in {
+  0% { opacity: 0; transform: scale(0.965) translateY(8px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes boot-glass-sheen {
+  0%, 100% { transform: translate3d(-9%, 0, 0) rotate(22deg); opacity: 0.35; }
+  50% { transform: translate3d(58%, 0, 0) rotate(22deg); opacity: 0.9; }
+}
+
+@keyframes boot-intro-in {
+  0% { opacity: 0; transform: scale(0.84) translateY(10px); }
+  62% { opacity: 1; transform: scale(1.025) translateY(0); }
+  100% { opacity: 0.82; transform: scale(0.94) translateY(2px); }
+}
+
+@keyframes boot-word-morph {
+  0% {
+    opacity: 0;
+    transform: scale(0.68) translateY(14px) skewX(-5deg);
+  }
+  38% {
+    opacity: 1;
+    transform: scale(1.085) translateY(-2px) skewX(1.6deg);
+  }
+  56% {
+    opacity: 1;
+    transform: scale(0.965) translateY(1px) skewX(-0.7deg);
+  }
+  72% {
+    opacity: 1;
+    transform: scale(1.032) translateY(0) skewX(0.25deg);
+  }
+  86% {
+    opacity: 1;
+    transform: scale(0.992) translateY(0) skewX(-0.08deg);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0) skewX(0);
+  }
+}
+
+@keyframes boot-final-in {
+  0% { opacity: 0; transform: scale(0.86) translateY(10px); }
+  100% { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+@keyframes boot-aurora-drift {
+  from { transform: translate3d(-2%, 1%, 0) scale(0.94); }
+  to { transform: translate3d(3%, -2%, 0) scale(1.07); }
+}
+
+@keyframes boot-pulse {
+  0%, 100% { opacity: 0.34; transform: scale(0.85); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
+@keyframes boot-progress {
+  0% { transform: translateX(-100%) scaleX(0.32); }
+  50% { transform: translateX(35%) scaleX(0.5); }
+  100% { transform: translateX(130%) scaleX(0.32); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-glass,
+  .boot-intro,
+  .boot-word,
+  .boot-final,
+  .boot-blob,
+  .boot-glass-sheen,
+  .boot-status i {
+    animation: none;
+    transition: none;
+  }
+  .boot-intro, .boot-word, .boot-final { opacity: 1; transform: none; filter: none; }
+  .boot-progress i { animation: none; transform: scaleX(1); }
+}
+
+/* 手机端：保持整块玻璃和同一套变形，只降低大 blur 的开销 */
+@media (max-width: 640px) {
+  .boot-aurora {
+    filter: blur(36px);
+    opacity: 0.64;
+  }
+
+  .boot-glass {
+    inset: max(5px, env(safe-area-inset-top)) max(5px, env(safe-area-inset-right)) max(5px, env(safe-area-inset-bottom)) max(5px, env(safe-area-inset-left));
+    border-radius: clamp(24px, 8vw, 36px);
+  }
+
+  .boot-center {
+    width: 92vw;
+    min-height: 220px;
+    transform: translate3d(calc(var(--boot-mx) * 7px), calc(var(--boot-my) * 6px), 0);
+  }
+
+  .boot-brand-mark {
+    width: clamp(94px, 27vw, 132px);
+  }
+
+  .boot-word {
+    font-size: clamp(68px, 19vw, 104px);
+    -webkit-text-stroke-width: 0.5px;
+    text-shadow:
+      0 1px 0 rgba(255, 255, 255, 0.42),
+      0 -1px 0 rgba(0, 20, 38, 0.42),
+      0 10px 22px rgba(0, 14, 28, 0.22);
+  }
+
+  .boot-final .boot-brand-mark {
+    width: 62px;
+  }
+
+  .boot-final-name {
+    font-size: clamp(31px, 9vw, 42px);
+  }
+
+  .boot-footer {
+    bottom: calc(35px + env(safe-area-inset-bottom));
+    gap: 10px;
+  }
+
+  .boot-status {
+    font-size: 10px;
+  }
+
+  .boot-progress {
+    width: 64vw;
+    bottom: calc(21px + env(safe-area-inset-bottom));
+  }
+}
+
+/* 小玻璃：叠在大玻璃上，位于文字/ Logo 下方 */
+.boot-lens {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 1;
+  width: min(360px, 78vw);
+  height: min(222px, 32vh);
+  max-width: 78vw;
+  max-height: 32vh;
+  border-radius: 50%;
+  /* 圆形小玻璃：50% 通透，文字和 Logo 不受影响 */
+  opacity: 0.5;
+  transform: translate(-50%, -50%) translate3d(calc(var(--boot-mx) * 7px), calc(var(--boot-my) * 6px), 0) scale(var(--boot-lens-sx, 1), var(--boot-lens-sy, 1));
+  transition:
+    transform 0.62s cubic-bezier(0.22, 1.35, 0.36, 1),
+    opacity 0.7s ease;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.boot-lens-halo {
+  position: absolute;
+  inset: -20%;
+  border-radius: 50%;
+  background:
+    radial-gradient(circle at 34% 27%, rgba(196, 243, 255, 0.34), transparent 37%),
+    radial-gradient(circle at 68% 76%, rgba(55, 166, 208, 0.22), transparent 43%);
+  pointer-events: none;
+}
+
+/* 多层嵌套的圆玻璃：越往内越薄、越通透，形成向内的透视深度 */
+.boot-lens-ring {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.boot-lens-ring.r1 {
+  inset: -0.5%;
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.42),
+    inset 0 -1px 0 rgba(0, 12, 24, 0.20),
+    0 0 0 1px rgba(255, 255, 255, 0.045),
+    0 12px 26px -20px rgba(0, 15, 30, 0.58);
+  background: linear-gradient(148deg, rgba(255, 255, 255, 0.10), transparent 38%, transparent 72%, rgba(124, 208, 255, 0.07));
+}
+
+.boot-lens-ring.r2 {
+  inset: 9%;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background:
+    radial-gradient(circle at 32% 24%, rgba(236, 252, 255, 0.15), transparent 35%),
+    linear-gradient(146deg, rgba(255, 255, 255, 0.07), transparent 55%, rgba(91, 174, 235, 0.07));
+  box-shadow:
+    inset 5px 7px 16px rgba(255, 255, 255, 0.06),
+    inset -7px -9px 18px rgba(0, 10, 22, 0.12);
+  opacity: 0.92;
+  transform: translate3d(calc(var(--boot-mx) * -2.5px), calc(var(--boot-my) * -2px), 0);
+}
+
+.boot-lens-ring.r3 {
+  inset: 19%;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  background: radial-gradient(circle at 33% 27%, rgba(238, 252, 255, 0.11), transparent 62%);
+  box-shadow:
+    inset 3px 5px 10px rgba(255, 255, 255, 0.045),
+    inset -4px -5px 12px rgba(0, 10, 22, 0.10);
+  opacity: 0.78;
+  transform: translate3d(calc(var(--boot-mx) * -4.5px), calc(var(--boot-my) * -3.5px), 0);
+}
+
+.boot-lens-core {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 34% 25%, rgba(255, 255, 255, 0.30), transparent 32%),
+    linear-gradient(132deg, rgba(255, 255, 255, 0.13), rgba(148, 219, 255, 0.07) 52%, rgba(67, 86, 178, 0.09));
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.34),
+    inset 14px 18px 34px rgba(255, 255, 255, 0.07),
+    inset -18px -22px 38px rgba(0, 8, 18, 0.18),
+    0 18px 54px -22px rgba(41, 150, 200, 0.34);
+}
+
+.boot-lens-spec {
+  position: absolute;
+  left: 22%;
+  top: 14%;
+  width: 27%;
+  height: 17%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 38% 34%, rgba(255, 255, 255, 0.54), rgba(255, 255, 255, 0.04) 72%, transparent);
+  filter: blur(1.4px);
+  transform: rotate(-22deg);
+}
+
+.boot-lens.is-logo {
+  transform: translate(-50%, -50%) translate3d(calc(var(--boot-mx) * 7px), calc(var(--boot-my) * 6px), 0) scale(var(--boot-lens-sx, 1), var(--boot-lens-sy, 1));
+}
+
+/* 内层负责呼吸/落地，外层负责随语言宽度做弹簧缩放。
+   分开之后，玻璃变大变小时不会被持续动画的 transform 抢走而瞬移。 */
+.boot-lens-inner {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  transform-origin: 50% 50%;
+  animation: boot-lens-breathe 4.6s ease-in-out infinite;
+  will-change: transform;
+}
+
+.boot-splash.is-logo .boot-lens-inner {
+  animation: boot-lens-land 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.boot-splash.is-charging .boot-lens-inner {
+  animation: none;
+}
+
+.boot-splash.is-zooming .boot-lens-inner {
+  animation: none;
+}
+
+@keyframes boot-lens-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.018, 0.985); }
+}
+
+@keyframes boot-lens-land {
+  0% { transform: scale(1.08, 0.94); }
+  100% { transform: scale(1); }
+}
+
+@media (max-width: 640px) {
+  .boot-lens {
+    max-width: 78vw;
+    max-height: 32vh;
+  }
+}
+
+/* 大玻璃里的水波焦散：让整块玻璃不是一块空板 */
+.boot-glass-caustic {
+  position: absolute;
+  inset: -24%;
+  pointer-events: none;
+  transform-origin: 50% 60%;
+}
+
+.boot-glass-caustic.c1 {
+  background:
+    repeating-radial-gradient(ellipse at 31% 72%, rgba(186, 241, 255, 0.12) 0 1px, transparent 2px 66px),
+    repeating-radial-gradient(ellipse at 72% 28%, rgba(255, 255, 255, 0.075) 0 1px, transparent 2px 92px);
+  opacity: 0.36;
+  animation: boot-caustic-drift 17s ease-in-out infinite alternate;
+}
+
+.boot-glass-caustic.c2 {
+  background:
+    radial-gradient(ellipse at 50% 84%, transparent 0 34%, rgba(133, 220, 255, 0.11) 35%, transparent 37% 46%, rgba(255, 255, 255, 0.08) 47%, transparent 49% 60%, rgba(133, 220, 255, 0.07) 61%, transparent 63%);
+  opacity: 0.45;
+  animation: boot-caustic-breathe 12s ease-in-out infinite;
+}
+
+/* 玻璃内部的细微浮尘/光点 */
+.boot-dust {
+  position: absolute;
+  width: 2.5px;
+  height: 2.5px;
+  border-radius: 50%;
+  background: rgba(226, 250, 255, 0.65);
+  box-shadow: 0 0 8px rgba(157, 233, 255, 0.55);
+  pointer-events: none;
+  animation: boot-dust-float 9s ease-in-out infinite;
+}
+
+.boot-dust.d1 { left: 16%; top: 26%; animation-delay: -2s; }
+.boot-dust.d2 { left: 74%; top: 19%; animation-delay: -6s; animation-duration: 11s; }
+.boot-dust.d3 { left: 82%; top: 62%; animation-delay: -4s; animation-duration: 12s; }
+.boot-dust.d4 { left: 24%; top: 71%; animation-delay: -7s; animation-duration: 10s; }
+.boot-dust.d5 { left: 58%; top: 82%; animation-delay: -3s; animation-duration: 13s; }
+.boot-dust.d6 { left: 42%; top: 13%; animation-delay: -9s; animation-duration: 15s; }
+
+/* 圆玻璃边缘的旋转反光，细而有方向感 */
+.boot-lens-rim {
+  position: absolute;
+  inset: -1.5%;
+  border-radius: 50%;
+  pointer-events: none;
+  background: conic-gradient(
+    from 214deg,
+    transparent 0 12%,
+    rgba(255, 255, 255, 0.52) 17%,
+    rgba(206, 244, 255, 0.22) 20%,
+    transparent 25% 54%,
+    rgba(170, 235, 255, 0.28) 59%,
+    rgba(255, 255, 255, 0.38) 62%,
+    transparent 68% 100%
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px), #000 calc(100% - 1px), transparent 100%);
+  mask: radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px), #000 calc(100% - 1px), transparent 100%);
+  filter: blur(0.35px);
+  animation: boot-rim-spin 11s linear infinite;
+}
+
+.boot-lens-ring.r2::after {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  border-radius: 50%;
+  pointer-events: none;
+  background: conic-gradient(
+    from 28deg,
+    transparent 0 18%,
+    rgba(255, 255, 255, 0.30) 23%,
+    transparent 28% 76%,
+    rgba(172, 233, 255, 0.16) 80%,
+    transparent 85% 100%
+  );
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2px), #000 calc(100% - 1px));
+  animation: boot-rim-spin 15s linear infinite reverse;
+}
+
+/* 每次切换语言，圆形玻璃向外扩一圈水波 */
+.boot-ripples {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+.boot-ripple {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 1px solid rgba(205, 246, 255, 0.36);
+  box-shadow: 0 0 18px rgba(132, 223, 255, 0.08);
+  opacity: 0;
+  animation: boot-ripple-out 1.55s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.boot-ripple.p2 {
+  border-color: rgba(174, 229, 255, 0.22);
+  animation-delay: 0.17s;
+}
+
+.boot-ripple.p3 {
+  border-color: rgba(215, 248, 255, 0.14);
+  border-width: 0.5px;
+  animation-duration: 1.9s;
+  animation-delay: 0.36s;
+}
+
+/* 水波内侧再起一圈更细的涟漪，让每次换语言的水面更丰富 */
+.boot-ripples::before {
+  content: '';
+  position: absolute;
+  inset: 5%;
+  border-radius: 50%;
+  border: 1px solid rgba(190, 242, 255, 0.24);
+  opacity: 0;
+  animation: boot-ripple-inner 1.7s cubic-bezier(0.16, 1, 0.3, 1) 0.08s forwards;
+}
+
+@keyframes boot-ripple-inner {
+  0% { opacity: 0.42; transform: scale(0.82); }
+  65% { opacity: 0.13; }
+  100% { opacity: 0; transform: scale(1.16); }
+}
+
+/* 镜片上的窄高光与底部水光，都是静态渐变，不增加每帧重绘成本 */
+.boot-lens-glint {
+  position: absolute;
+  left: 9%;
+  top: 4%;
+  width: 44%;
+  height: 26%;
+  border-radius: 50%;
+  background: linear-gradient(105deg, rgba(255, 255, 255, 0.20), rgba(255, 255, 255, 0.04) 48%, transparent 74%);
+  transform: rotate(-18deg);
+  opacity: 0.56;
+  pointer-events: none;
+}
+
+.boot-lens-water {
+  position: absolute;
+  left: 13%;
+  right: 13%;
+  bottom: 5%;
+  height: 18%;
+  border-radius: 50%;
+  background: radial-gradient(ellipse at 50% 72%, rgba(139, 225, 255, 0.13), rgba(139, 225, 255, 0.03) 42%, transparent 72%);
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+@keyframes boot-caustic-drift {
+  0% { transform: translate3d(-2%, 1%, 0) scale(1) rotate(-1deg); }
+  50% { transform: translate3d(2%, -1%, 0) scale(1.035) rotate(1deg); }
+  100% { transform: translate3d(3%, -2%, 0) scale(1.06) rotate(-0.4deg); }
+}
+
+@keyframes boot-caustic-breathe {
+  0%, 100% { opacity: 0.28; transform: scale(0.97); }
+  50% { opacity: 0.52; transform: scale(1.05); }
+}
+
+@keyframes boot-dust-float {
+  0%, 100% { transform: translate3d(0, 0, 0); opacity: 0.22; }
+  45% { transform: translate3d(7px, -13px, 0); opacity: 0.78; }
+  70% { transform: translate3d(-4px, -21px, 0); opacity: 0.38; }
+}
+
+@keyframes boot-rim-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes boot-ripple-out {
+  0% { opacity: 0.55; transform: scale(0.96); }
+  55% { opacity: 0.24; }
+  100% { opacity: 0; transform: scale(1.58); }
+}
+
+/* 手机端减少粒子数量和大面积 blur，保留边缘反光和水波 */
+@media (max-width: 640px) {
+  .boot-glass-caustic.c1 {
+    opacity: 0.28;
+  }
+  .boot-glass-caustic.c2 {
+    opacity: 0.34;
+  }
+  .boot-dust.d4,
+  .boot-dust.d5,
+  .boot-dust.d6 {
+    display: none;
+  }
+  .boot-lens-ring.r2::after {
+    animation-duration: 19s;
+  }
+}
+
+/* 蓄力完成后停住：画面不再运动，等用户点击/按键 */
+.boot-splash.is-armed {
+  cursor: pointer;
+}
+
+/* 问候阶段可点击：第一次点击进入 Logo 蓄力 */
+.boot-splash.is-greetings {
+  cursor: pointer;
+}
+
+/* 等待态只留“活着”的信号，不做镜头运动：
+   提示文字呼吸、镜片光晕呼吸、水波从镜片缓慢外扩，邀请触摸。 */
+.boot-splash.is-armed .boot-hint.is-ready {
+  animation: boot-hint-pulse 2.4s ease-in-out infinite;
+}
+
+.boot-splash.is-armed .boot-lens-halo {
+  animation: boot-halo-breathe 3s ease-in-out infinite;
+}
+
+.boot-splash.is-armed .boot-ripple {
+  animation: boot-ripple-invite 3.2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+}
+
+.boot-splash.is-armed .boot-ripple.p2 {
+  animation-delay: 1.6s;
+}
+
+@keyframes boot-hint-pulse {
+  0%, 100% { opacity: 0.68; }
+  50% { opacity: 1; }
+}
+
+@keyframes boot-halo-breathe {
+  0%, 100% { opacity: 0.55; transform: scale(0.98); }
+  50% { opacity: 1; transform: scale(1.04); }
+}
+
+@keyframes boot-ripple-invite {
+  0% { opacity: 0; transform: scale(0.62); }
+  12% { opacity: 0.5; }
+  70% { opacity: 0.16; }
+  100% { opacity: 0; transform: scale(1.42); }
+}
+
+/* 一镜到底的推镜：整块画面向前推，近景（Logo）、中景（镜片）、
+   远景（大玻璃）按不同倍率加速，形成真实景深而不是一张图整体放大。
+   最后 0.26s 整层淡出，主页面已经在下面，所以是连续化入、没有硬切。 */
+.boot-splash.is-zooming {
+  pointer-events: auto;
+  cursor: default;
+  animation: boot-camera-through 0.85s cubic-bezier(0.55, 0.02, 0.7, 0.65) forwards;
+  transform-origin: 50% 50%;
+}
+
+.boot-splash.is-zooming .boot-footer,
+.boot-splash.is-zooming .boot-progress {
+  opacity: 0;
+  transition: opacity 0.25s ease;
+}
+
+.boot-splash.is-zooming .boot-center,
+.boot-splash.is-zooming .boot-lens,
+.boot-splash.is-zooming .boot-glass {
+  will-change: transform, opacity;
+}
+
+.boot-splash.is-zooming .boot-glass {
+  animation: boot-glass-rush 0.8s cubic-bezier(0.5, 0, 0.4, 1) forwards;
+}
+
+.boot-splash.is-zooming .boot-center {
+  animation: boot-center-rush 0.85s cubic-bezier(0.5, 0, 0.32, 1) forwards;
+}
+
+.boot-splash.is-zooming .boot-lens {
+  animation: boot-lens-rush 0.8s cubic-bezier(0.5, 0, 0.36, 1) forwards;
+}
+
+@keyframes boot-camera-through {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  55% {
+    opacity: 1;
+  }
+  92% {
+    opacity: 0;
+  }
+  100% {
+    transform: scale(2.1);
+    opacity: 0;
+  }
+}
+
+@keyframes boot-glass-rush {
+  0% {
+    opacity: 1;
+    transform: translate3d(calc(var(--boot-mx) * -6px), calc(var(--boot-my) * -5px), 0) scale(1);
+  }
+  40% { opacity: 1; }
+  75% {
+    opacity: 0;
+    transform: translate3d(calc(var(--boot-mx) * -6px), calc(var(--boot-my) * -5px), 0) scale(1.16);
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(calc(var(--boot-mx) * -6px), calc(var(--boot-my) * -5px), 0) scale(1.22);
+  }
+}
+
+/* 近景：Logo 从蓄力姿态放大、抬起、淡出，和主页面化入重叠，
+   不会出现“画面里什么都没有”的空档 */
+@keyframes boot-center-rush {
+  0% {
+    opacity: 1;
+    transform: translate3d(calc(var(--boot-mx) * 7px), calc(var(--boot-c-ty) + var(--boot-my) * 6px), 0) scale(var(--boot-c-s));
+  }
+  45% {
+    opacity: 1;
+  }
+  82% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+    transform: translate3d(0, -3vh, 0) scale(2.15);
+  }
+}
+
+/* 中景：镜片略慢于 Logo，向外扩成一道光圈 */
+@keyframes boot-lens-rush {
+  0% {
+    opacity: 0.44;
+    transform: translate(-50%, -50%) translate3d(calc(var(--boot-mx) * 4px), calc(var(--boot-my) * 3px), 0) scale(calc(var(--boot-lens-sx, 1) * var(--boot-lens-hold)), calc(var(--boot-lens-sy, 1) * var(--boot-lens-hold)));
+  }
+  42% {
+    opacity: 0.38;
+  }
+  80% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+    transform: translate(-50%, -50%) translate3d(0, -2vh, 0) scale(calc(var(--boot-lens-sx, 1) * 1.9), calc(var(--boot-lens-sy, 1) * 1.9));
+  }
+}
+
+/* 点击处炸开的水波：让“我点了一下”和“镜头出发”发生在同一帧 */
+.boot-tap-ripple {
+  position: absolute;
+  left: var(--boot-tap-x, 50%);
+  top: var(--boot-tap-y, 50%);
+  z-index: 7;
+  width: 0;
+  height: 0;
+  pointer-events: none;
+}
+
+.boot-tap-ripple i {
+  position: absolute;
+  left: -70px;
+  top: -70px;
+  width: 140px;
+  height: 140px;
+  border-radius: 50%;
+  border: 1px solid rgba(225, 251, 255, 0.85);
+  box-shadow: 0 0 26px rgba(150, 235, 255, 0.28);
+  opacity: 0;
+  animation: boot-tap-ring 0.62s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.boot-tap-ripple i:nth-child(2) {
+  animation-delay: 0.07s;
+  border-color: rgba(178, 237, 255, 0.55);
+}
+
+.boot-tap-ripple i:nth-child(3) {
+  animation-delay: 0.14s;
+  border-color: rgba(148, 214, 255, 0.36);
+}
+
+@keyframes boot-tap-ring {
+  0% { opacity: 0.95; transform: scale(0.3); }
+  100% { opacity: 0; transform: scale(2.6); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-splash.is-zooming {
+    animation: boot-fade-through 0.4s ease forwards;
+  }
+  .boot-splash.is-zooming .boot-center,
+  .boot-splash.is-zooming .boot-lens,
+  .boot-splash.is-zooming .boot-glass {
+    animation: none;
+  }
+  .boot-splash.is-armed .boot-hint.is-ready,
+  .boot-splash.is-armed .boot-lens-halo,
+  .boot-splash.is-armed .boot-ripple,
+  .boot-tap-ripple {
+    animation: none;
+  }
+  .boot-tap-ripple {
+    display: none;
+  }
+}
+
+@keyframes boot-fade-through {
+  to { opacity: 0; }
+}
+
+/* 运镜时暂停环境动画，把每一帧留给相机推近 */
+.boot-splash.is-zooming .boot-blob,
+.boot-splash.is-zooming .boot-glass-caustic,
+.boot-splash.is-zooming .boot-dust,
+.boot-splash.is-zooming .boot-lens-rim,
+.boot-splash.is-zooming .boot-glass-sheen,
+.boot-splash.is-zooming .boot-ripple {
+  animation-play-state: paused;
+}
+
+
+/* 蓄力：Logo 向后收、光聚拢。蓄力结束后停在同一个姿态等用户，
+   所以 armed 复用同样的收缩姿态，避免停顿那一刻画面跳一下。 */
+.boot-splash.is-charging .boot-center,
+.boot-splash.is-armed .boot-center {
+  transform: translate3d(calc(var(--boot-mx) * 7px), calc(var(--boot-c-ty) + var(--boot-my) * 6px), 0) scale(var(--boot-c-s));
+  transition: transform 0.32s cubic-bezier(0.32, 0, 0.2, 1);
+}
+
+.boot-splash.is-charging .boot-lens,
+.boot-splash.is-armed .boot-lens {
+  animation: none;
+  opacity: 0.44;
+  transform: translate(-50%, -50%) translate3d(calc(var(--boot-mx) * 4px), calc(var(--boot-my) * 3px), 0) scale(calc(var(--boot-lens-sx, 1) * var(--boot-lens-hold)), calc(var(--boot-lens-sy, 1) * var(--boot-lens-hold)));
+  transition:
+    transform 0.32s cubic-bezier(0.32, 0, 0.2, 1),
+    opacity 0.32s ease;
+}
+
+/* 停住等用户时，鼠标轻微移动仍然能推动镜片和 Logo（跟随更紧，不拖泥带水） */
+.boot-splash.is-armed .boot-center {
+  transition: transform 0.12s ease-out;
+}
+
+.boot-splash.is-armed .boot-lens {
+  transition:
+    transform 0.12s ease-out,
+    opacity 0.3s ease;
+}
+
+.boot-charge {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 6;
+  width: 236px;
+  height: 236px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(205, 247, 255, 0.50);
+  box-shadow:
+    0 0 26px rgba(137, 226, 255, 0.18),
+    inset 0 0 22px rgba(183, 240, 255, 0.12);
+  transform: translate(-50%, -50%) scale(1.7);
+  opacity: 0;
+  pointer-events: none;
+  animation: boot-charge-in 0.28s cubic-bezier(0.3, 0, 0.2, 1) forwards;
+}
+
+@keyframes boot-charge-in {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(1.7); }
+  55% { opacity: 0.64; }
+  100% { opacity: 0; transform: translate(-50%, -50%) scale(0.78); }
+}
+
+@media (max-width: 640px) {
+  .boot-splash {
+    --boot-c-ty: 7px;
+    --boot-c-s: 0.87;
+  }
+  .boot-charge {
+    width: 198px;
+    height: 198px;
+  }
+  .boot-tap-ripple i {
+    left: -58px;
+    top: -58px;
+    width: 116px;
+    height: 116px;
+  }
+}
+
+
+/* 屏幕阅读器专用状态：加载完成、可以进入时会播报 */
+.boot-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 降低透明度偏好：玻璃更实，避免透到看不清字 */
+@media (prefers-reduced-transparency: reduce) {
+  .boot-glass {
+    background:
+      linear-gradient(133deg, rgba(255, 255, 255, 0.14), rgba(255, 255, 255, 0.05) 34%, rgba(176, 221, 255, 0.07) 68%, rgba(255, 255, 255, 0.1)),
+      #071019;
+  }
+  .boot-lens-core {
+    background:
+      radial-gradient(circle at 34% 25%, rgba(255, 255, 255, 0.30), transparent 32%),
+      #10202e;
+  }
+}
+
+/* 提高对比度偏好：文字、边框、镜圈都更清楚 */
+@media (prefers-contrast: more) {
+  .boot-hint {
+    color: #ffffff;
+  }
+  .boot-status {
+    color: rgba(235, 246, 255, 0.82);
+  }
+  .boot-glass {
+    border-color: rgba(255, 255, 255, 0.45);
+  }
+  .boot-lens-ring.r1 {
+    border-color: rgba(255, 255, 255, 0.55);
+  }
+}
+
+/* 环境层只使用 transform/opacity，交给合成器；不要动 filter/backdrop-filter */
+.boot-blob,
+.boot-glass-sheen,
+.boot-glass-caustic,
+.boot-dust,
+.boot-lens-rim,
+.boot-lens-ring.r2::after {
+  will-change: transform, opacity;
+  backface-visibility: hidden;
+}
+
+/* ── 问候阶段的三层微光：文字光晕、镜面扫光、环绕光点 ── */
+.boot-center > .boot-word {
+  z-index: 1;
+}
+
+.boot-word-aura {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 0;
+  width: min(70vw, 540px);
+  height: min(34vh, 280px);
+  border-radius: 50%;
+  transform: translate(-50%, -50%) scale(0.86);
+  background:
+    radial-gradient(ellipse at 50% 48%, rgba(153, 229, 255, 0.14), rgba(105, 178, 255, 0.06) 38%, transparent 70%);
+  opacity: 0;
+  pointer-events: none;
+  animation: boot-word-aura-in 1.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  will-change: transform, opacity;
+}
+
+@keyframes boot-word-aura-in {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.84); }
+  38% { opacity: 0.72; transform: translate(-50%, -50%) scale(1.045); }
+  100% { opacity: 0.30; transform: translate(-50%, -50%) scale(1); }
+}
+
+.boot-lens-shimmer {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  border-radius: 50%;
+  overflow: hidden;
+  pointer-events: none;
+  animation: boot-shimmer-fade 1.35s ease-out both;
+}
+
+.boot-lens-shimmer > i {
+  position: absolute;
+  top: -22%;
+  bottom: -22%;
+  left: -46%;
+  width: 38%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.16) 48%, rgba(185, 241, 255, 0.08) 68%, transparent);
+  transform: translateX(0) skewX(-14deg);
+  animation: boot-shimmer-sweep 1.15s cubic-bezier(0.22, 0.8, 0.2, 1) both;
+}
+
+@keyframes boot-shimmer-fade {
+  0%, 8% { opacity: 0; }
+  28% { opacity: 0.9; }
+  100% { opacity: 0; }
+}
+
+@keyframes boot-shimmer-sweep {
+  0% { transform: translateX(0) skewX(-14deg); opacity: 0; }
+  18% { opacity: 0.7; }
+  100% { transform: translateX(420%) skewX(-14deg); opacity: 0; }
+}
+
+.boot-lens-orbit {
+  position: absolute;
+  inset: 7%;
+  border-radius: 50%;
+  pointer-events: none;
+  animation: boot-orbit-spin 18s linear infinite;
+  will-change: transform;
+}
+
+.boot-lens-orbit > i {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: rgba(224, 251, 255, 0.82);
+  box-shadow:
+    0 0 7px rgba(151, 234, 255, 0.52),
+    0 0 15px rgba(111, 207, 255, 0.22);
+  animation: boot-orbit-twinkle 3.8s ease-in-out infinite;
+}
+
+.boot-lens-orbit > i:nth-child(1) { left: 8%; top: 28%; }
+.boot-lens-orbit > i:nth-child(2) { right: 7%; top: 37%; animation-delay: -1.1s; }
+.boot-lens-orbit > i:nth-child(3) { left: 22%; bottom: 8%; animation-delay: -2.2s; }
+.boot-lens-orbit > i:nth-child(4) { right: 20%; bottom: 14%; animation-delay: -3s; }
+
+@keyframes boot-orbit-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes boot-orbit-twinkle {
+  0%, 100% { opacity: 0.24; transform: scale(0.8); }
+  45% { opacity: 0.92; transform: scale(1.15); }
+  72% { opacity: 0.38; transform: scale(0.92); }
+}
+
+/* 镜头推进时暂停这些装饰动画，把帧留给相机 */
+.boot-splash.is-zooming .boot-lens-orbit,
+.boot-splash.is-zooming .boot-lens-shimmer,
+.boot-splash.is-zooming .boot-word-aura {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-word-aura,
+  .boot-lens-shimmer,
+  .boot-lens-shimmer > i,
+  .boot-lens-orbit,
+  .boot-lens-orbit > i {
+    animation: none;
+  }
+  .boot-word-aura { opacity: 0.20; }
+  .boot-lens-orbit > i { opacity: 0.42; }
+}
+
+/* ── 宇宙层：星场、星云、行星轨道 ───────────────────────── */
+.boot-cosmos {
+  position: absolute;
+  inset: -6%;
+  z-index: -2;
+  overflow: hidden;
+  pointer-events: none;
+  transform: translate3d(calc(var(--boot-mx) * -13px), calc(var(--boot-my) * -10px), 0);
+  transition: transform 1.1s ease-out;
+  will-change: transform;
+}
+
+.boot-nebula {
+  position: absolute;
+  inset: -22%;
+  opacity: 0.72;
+  background:
+    linear-gradient(112deg, transparent 12%, rgba(76, 172, 206, 0.075) 30%, rgba(123, 120, 235, 0.085) 46%, transparent 66%),
+    radial-gradient(ellipse at 74% 22%, rgba(77, 168, 220, 0.11), transparent 48%),
+    radial-gradient(ellipse at 20% 82%, rgba(96, 90, 205, 0.09), transparent 46%);
+}
+
+.boot-stars {
+  position: absolute;
+  inset: -25%;
+  pointer-events: none;
+  background-repeat: repeat;
+  will-change: opacity;
+}
+
+.boot-stars.s1 {
+  background-size: 390px 390px;
+  opacity: 0.56;
+  background-image:
+    radial-gradient(circle at 7% 13%, rgba(255, 255, 255, 0.76) 0 1px, transparent 1.6px),
+    radial-gradient(circle at 21% 31%, rgba(194, 239, 255, 0.48) 0 0.8px, transparent 1.4px),
+    radial-gradient(circle at 36% 8%, rgba(255, 255, 255, 0.38) 0 0.9px, transparent 1.5px),
+    radial-gradient(circle at 49% 44%, rgba(214, 243, 255, 0.62) 0 1.1px, transparent 1.8px),
+    radial-gradient(circle at 63% 19%, rgba(255, 255, 255, 0.35) 0 0.8px, transparent 1.4px),
+    radial-gradient(circle at 78% 37%, rgba(196, 233, 255, 0.55) 0 1px, transparent 1.6px),
+    radial-gradient(circle at 89% 11%, rgba(255, 255, 255, 0.42) 0 0.8px, transparent 1.4px),
+    radial-gradient(circle at 17% 68%, rgba(255, 255, 255, 0.33) 0 0.8px, transparent 1.4px),
+    radial-gradient(circle at 43% 76%, rgba(201, 241, 255, 0.50) 0 1px, transparent 1.6px),
+    radial-gradient(circle at 69% 62%, rgba(255, 255, 255, 0.36) 0 0.8px, transparent 1.4px),
+    radial-gradient(circle at 82% 84%, rgba(208, 243, 255, 0.46) 0 0.9px, transparent 1.5px),
+    radial-gradient(circle at 94% 57%, rgba(255, 255, 255, 0.30) 0 0.7px, transparent 1.3px),
+    radial-gradient(circle at 30% 92%, rgba(255, 255, 255, 0.31) 0 0.7px, transparent 1.3px);
+  animation: boot-star-twinkle 7.5s ease-in-out infinite alternate;
+}
+
+.boot-stars.s2 {
+  inset: -30%;
+  background-size: 630px 630px;
+  opacity: 0.34;
+  background-image:
+    radial-gradient(circle at 11% 24%, rgba(255, 255, 255, 0.52) 0 1.3px, transparent 2px),
+    radial-gradient(circle at 28% 57%, rgba(193, 234, 255, 0.42) 0 1px, transparent 1.7px),
+    radial-gradient(circle at 44% 16%, rgba(255, 255, 255, 0.38) 0 1.1px, transparent 1.8px),
+    radial-gradient(circle at 58% 72%, rgba(201, 239, 255, 0.44) 0 1.2px, transparent 1.9px),
+    radial-gradient(circle at 76% 43%, rgba(255, 255, 255, 0.32) 0 0.9px, transparent 1.6px),
+    radial-gradient(circle at 92% 78%, rgba(206, 240, 255, 0.45) 0 1.2px, transparent 1.9px),
+    radial-gradient(circle at 19% 86%, rgba(255, 255, 255, 0.30) 0 0.9px, transparent 1.6px);
+  animation: boot-star-twinkle 11s ease-in-out infinite alternate-reverse;
+}
+
+.boot-shooting-star {
+  position: absolute;
+  top: 18%;
+  left: -18%;
+  width: 150px;
+  height: 1px;
+  opacity: 0;
+  background: linear-gradient(90deg, transparent, rgba(213, 246, 255, 0.82), rgba(255, 255, 255, 0));
+  transform: rotate(-24deg) translate3d(0, 0, 0);
+  animation: boot-shooting-star 15s ease-in infinite;
+  will-change: transform, opacity;
+}
+
+.boot-shooting-star.q2 {
+  top: 62%;
+  width: 96px;
+  animation-delay: 7.2s;
+  animation-duration: 19s;
+}
+
+@keyframes boot-star-twinkle {
+  0% { opacity: 0.27; }
+  55% { opacity: 0.58; }
+  100% { opacity: 0.38; }
+}
+
+@keyframes boot-shooting-star {
+  0%, 86%, 100% { opacity: 0; transform: rotate(-24deg) translate3d(0, 0, 0); }
+  87% { opacity: 0.8; }
+  93% { opacity: 0; transform: rotate(-24deg) translate3d(74vw, 28vh, 0); }
+}
+
+/* 行星轨道：细椭圆轨道 + 两颗慢速卫星 */
+.boot-orbit-system {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  z-index: 0;
+  width: min(88vmin, 900px);
+  height: min(88vmin, 900px);
+  opacity: 0.68;
+  pointer-events: none;
+  transform: translate(-50%, -50%) translate3d(calc(var(--boot-mx) * 10px), calc(var(--boot-my) * 8px), 0) rotate(-18deg) scaleY(0.56);
+  transition: transform 1.1s ease-out;
+  will-change: transform;
+}
+
+.boot-orbit-line {
+  position: absolute;
+  border-radius: 50%;
+  border: 1px solid rgba(154, 222, 255, 0.14);
+  box-shadow: 0 0 16px rgba(110, 205, 255, 0.045);
+}
+
+.boot-orbit-line.o1 { inset: 0; }
+.boot-orbit-line.o2 {
+  inset: 12%;
+  border-color: rgba(175, 213, 255, 0.10);
+  border-style: dashed;
+}
+
+.boot-orbit-spinner {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  animation: boot-orbit-rotate 34s linear infinite;
+  will-change: transform;
+}
+
+.boot-orbit-spinner.sp2 {
+  inset: 12%;
+  animation-duration: 26s;
+  animation-direction: reverse;
+}
+
+.boot-moon {
+  position: absolute;
+  left: 50%;
+  top: -4px;
+  width: 7px;
+  height: 7px;
+  margin-left: -3.5px;
+  border-radius: 50%;
+  background: #c6efff;
+  box-shadow:
+    0 0 8px rgba(150, 230, 255, 0.62),
+    0 0 22px rgba(106, 194, 255, 0.28);
+}
+
+.boot-moon.m2 {
+  top: -3px;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  background: #b9cbff;
+  box-shadow: 0 0 7px rgba(151, 169, 255, 0.55);
+}
+
+@keyframes boot-orbit-rotate {
+  to { transform: rotate(360deg); }
+}
+
+/* 镜片上的晨昏线，让圆形玻璃更像一颗被侧光照亮的行星 */
+.boot-lens-crescent {
+  position: absolute;
+  inset: -1%;
+  border-radius: 50%;
+  background: radial-gradient(circle at 31% 24%, transparent 0 38%, rgba(0, 9, 20, 0.10) 60%, rgba(0, 4, 12, 0.33) 100%);
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+@media (max-width: 640px) {
+  .boot-stars.s1 { opacity: 0.44; }
+  .boot-stars.s2 { opacity: 0.26; }
+  .boot-orbit-system {
+    width: min(94vmin, 520px);
+    height: min(94vmin, 520px);
+    opacity: 0.58;
+  }
+  .boot-shooting-star { width: 110px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-stars,
+  .boot-shooting-star,
+  .boot-orbit-spinner {
+    animation: none;
+  }
+  .boot-shooting-star { display: none; }
+  .boot-orbit-system,
+  .boot-cosmos { transform: none; }
+}
+
+/* 运镜时冻结星场和轨道旋转，只保留相机推进 */
+.boot-splash.is-zooming .boot-stars,
+.boot-splash.is-zooming .boot-shooting-star,
+.boot-splash.is-zooming .boot-orbit-spinner {
+  animation-play-state: paused;
+}

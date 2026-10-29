@@ -8,3 +8,9 @@ dist
 
 deploy/*.tar.gz
 deploy/*.zip
+
+# 本机运行数据与临时文件，不进仓库
+data/
+tmp/
+boot-static-test.html
+

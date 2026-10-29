@@ -10,6 +10,8 @@ import {
 } from 'react';
 import { LiquidGlass } from 'apple-liquid-glass-webgl';
 import { loadDockFrost, onPrefsChange } from '../lib/prefs';
+import { photoUrl, type BackdropSetting } from './Backdrop';
+import { paintControlText } from '../lib/glassTextPainter';
 
 export type TabKey = 'query' | 'cases' | 'history' | 'profile';
 
@@ -71,7 +73,100 @@ const INSET = 4;
 
 type LensPhase = 'idle' | 'stretch' | 'settle';
 
-export function Dock({ value, onChange }: { value: TabKey; onChange: (k: TabKey) => void }) {
+const GLASS_FROST_MAX = 0.9;
+
+/**
+ * 0 = 液态玻璃，0.9 = 毛玻璃。
+ * 两个映射必须同时变化，否则滑块中间会只剩“糊”而没有玻璃边缘：
+ * - tint 随 frost 缓慢增加，给文字留底；
+ * - refraction / edgeReach / dispersion 随 frost 下降，避免毛玻璃还带彩色边缘；
+ * - backdropBlur 用绝对像素补足毛玻璃的雾化。
+ */
+function glassTint(tone: 'light' | 'dark', frost: number): number {
+  const f = Math.min(GLASS_FROST_MAX, Math.max(0, frost));
+  return (tone === 'light' ? 0.26 : 0.14) + f * 0.06;
+}
+
+function glassMaterial(frost: number) {
+  const f = Math.min(GLASS_FROST_MAX, Math.max(0, frost));
+  return {
+    refraction: 112 - f * 78, // 112 → 41.8
+    edgeReach: 0.15 - f * 0.03, // 0.15 → 0.123
+    dispersion: 2.2 - f * 1.3, // 2.2 → 1.03
+    frost: f,
+    backdropBlur: f * 8, // 0 → 7.2px
+    body: 0.7 + f * 0.14, // 0.70 → 0.826
+    rim: 0.26 - f * 0.06, // 0.26 → 0.206
+    reflection: 0.32 - f * 0.05, // 0.32 → 0.275
+    highlight: 0.35 - f * 0.08, // 0.35 → 0.278
+  };
+}
+
+/** 取背景底部中心区域的亮度和对比度，决定玻璃色调和文字阴影强度 */
+function useBackdropLuminance(setting: BackdropSetting): { lum: number; contrast: number } {
+  const [metrics, setMetrics] = useState({ lum: 0.45, contrast: 0.18 });
+
+  useEffect(() => {
+    const url =
+      setting.kind === 'custom' && setting.dataUrl
+        ? setting.dataUrl
+        : photoUrl(setting.photo ?? 0);
+    let alive = true;
+    const img = new Image();
+    img.decoding = 'async';
+    img.onload = () => {
+      if (!alive) return;
+      try {
+        const size = 64;
+        const canvas = document.createElement('canvas');
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d', { willReadFrequently: true });
+        if (!ctx) return;
+        ctx.drawImage(img, 0, 0, size, size);
+        // Dock 在底部居中：只采样底部中心 50%×40%，比整张图底部更贴近实际玻璃区域
+        const sx = Math.floor(size * 0.25);
+        const sy = Math.floor(size * 0.58);
+        const data = ctx.getImageData(sx, sy, Math.ceil(size * 0.5), Math.ceil(size * 0.4)).data;
+        const values: number[] = [];
+        for (let i = 0; i < data.length; i += 4) {
+          values.push((0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2]) / 255);
+        }
+        if (!values.length) return;
+        const lum = values.reduce((a, b) => a + b, 0) / values.length;
+        const variance = values.reduce((a, b) => a + (b - lum) ** 2, 0) / values.length;
+        setMetrics({ lum, contrast: Math.sqrt(variance) });
+      } catch {
+        setMetrics({ lum: 0.45, contrast: 0.18 });
+      }
+    };
+    img.onerror = () => {
+      if (alive) setMetrics({ lum: 0.45, contrast: 0.18 });
+    };
+    img.src = url;
+    return () => {
+      alive = false;
+    };
+  }, [setting.kind, setting.photo, setting.dataUrl]);
+
+  return metrics;
+}
+
+export function Dock({
+  value,
+  onChange,
+  backdrop,
+  profileBadge = 0,
+}: {
+  value: TabKey;
+  onChange: (k: TabKey) => void;
+  backdrop: BackdropSetting;
+  /** 「我的」上的未配置 Agent 提醒角标，0 为不显示 */
+  profileBadge?: number;
+}) {
+  const { lum, contrast } = useBackdropLuminance(backdrop);
+  const tone = lum > 0.58 ? 'light' : 'dark';
+  const lowContrast = contrast < 0.12;
   const hostRef = useRef<HTMLElement>(null);
   const itemRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const [boxes, setBoxes] = useState<Box[]>([]);
@@ -87,39 +182,66 @@ export function Dock({ value, onChange }: { value: TabKey; onChange: (k: TabKey)
   const settled = useRef(false);
 
   const [frost, setFrost] = useState(loadDockFrost);
-  const frostTimer = useRef<number | undefined>(undefined);
+  const [glassFailed, setGlassFailed] = useState(false);
+  const frostRaf = useRef<number | undefined>(undefined);
+  const glassRef = useRef<LiquidGlass | null>(null);
 
-  useEffect(
-    () =>
-      onPrefsChange(() => {
-        // 拖动滑杆会连续触发，攒一下再重建玻璃，避免反复创建 WebGL 上下文
-        window.clearTimeout(frostTimer.current);
-        frostTimer.current = window.setTimeout(() => setFrost(loadDockFrost()), 160);
-      }),
-    [],
-  );
-
-  useEffect(() => () => window.clearTimeout(frostTimer.current), []);
+  // 拖动滑杆时不要防抖到“松手才更新”：每个 input 事件合并到下一帧，
+  // 让 WebGL 参数、CSS 模糊和文字对比度跟随手指连续变化。
+  useEffect(() => {
+    const off = onPrefsChange(() => {
+      if (frostRaf.current !== undefined) window.cancelAnimationFrame(frostRaf.current);
+      frostRaf.current = window.requestAnimationFrame(() => setFrost(loadDockFrost()));
+    });
+    return () => {
+      off();
+      if (frostRaf.current !== undefined) window.cancelAnimationFrame(frostRaf.current);
+    };
+  }, []);
 
   useEffect(() => {
     const el = hostRef.current;
-    if (!el) return;
+    if (!el || glassFailed) return;
 
-    // 液态玻璃和毛玻璃的区别在「折射」和「雾化」：
-    // frost 越大越糊，同时把折射压下去，否则两侧手感还是同一种玻璃。
-    const glass = new LiquidGlass(el, {
-      // tint 压到很低，让底下的真实画面透上来，亮度自然跟着背景走；
-      // tintTone 交给 auto，亮背景偏亮、暗背景偏暗，而不是一块固定的灰。
-      // 液态玻璃的材料参数：染色只用来压住一点杂色，真正的体积感来自折射。
-      // 滑杆往右走，雾化加重、折射减弱，就是液态 → 毛玻璃的那条线。
-      tint: 0.12 + frost * 0.18,
-      tintTone: 'dark',
+    // 鸿蒙/部分安卓 WebView 没有 WebGL2，LiquidGlass 会直接失败；
+    // 先探测再做，失败就交给 dock--fallback 的 CSS 毛玻璃。
+    let glass: LiquidGlass | null = null;
+    try {
+      const probe = document.createElement('canvas');
+      const probeCtx = probe.getContext('webgl2');
+      if (!probeCtx) {
+        setGlassFailed(true);
+        return;
+      }
+      probeCtx.getExtension('WEBGL_lose_context')?.loseContext();
+      glass = new LiquidGlass(el, {
+        tint: glassTint(tone, frost),
+        tintTone: tone,
+        frost,
+        material: glassMaterial(frost),
+        radius: 30,
+        backdrop: ['auto', paintControlText],
+      });
+      glassRef.current = glass;
+    } catch {
+      setGlassFailed(true);
+    }
+    return () => {
+      glassRef.current = null;
+      glass?.destroy();
+    };
+  }, [glassFailed]);
+
+  // 只在同一个 WebGL 实例上 update，不销毁/重建上下文。
+  // 这既是实时滑块的关键，也避免连续拖动把 GPU 上下文耗尽。
+  useLayoutEffect(() => {
+    glassRef.current?.update({
+      tint: glassTint(tone, frost),
+      tintTone: tone,
       frost,
-      material: { refraction: 110 - frost * 82 },
-      radius: 30,
+      material: glassMaterial(frost),
     });
-    return () => glass.destroy();
-  }, [frost]);
+  }, [frost, tone]);
 
   const measure = useCallback(() => {
     const host = hostRef.current;
@@ -271,11 +393,17 @@ export function Dock({ value, onChange }: { value: TabKey; onChange: (k: TabKey)
 
   return (
     <nav
-      className="dock"
+      className={`dock is-${tone}-bg${lowContrast ? ' is-low-contrast' : ''}${glassFailed ? ' dock--fallback' : ''}`}
       ref={hostRef}
       aria-label="主导航"
       onPointerDown={onPointerDown}
-      style={{ '--dock-frost': frost.toFixed(2) } as CSSProperties}
+      style={
+        {
+          '--dock-frost': frost.toFixed(2),
+          '--dock-lum': lum.toFixed(2),
+          '--dock-contrast': contrast.toFixed(2),
+        } as CSSProperties
+      }
     >
       <span className={`dock-lens${dragging ? ' is-drag' : ''}`} style={style} aria-hidden="true" />
       {ITEMS.map((it, i) => (
@@ -286,8 +414,15 @@ export function Dock({ value, onChange }: { value: TabKey; onChange: (k: TabKey)
           }}
           className={`dock-item${value === it.key ? ' is-on' : ''}`}
           onClick={() => onChange(it.key)}
+          aria-label={it.key === 'profile' && profileBadge > 0 ? `${it.label}，有未配置的 Agent` : it.label}
+          title={it.label}
           aria-current={value === it.key ? 'page' : undefined}
         >
+          {it.key === 'profile' && profileBadge > 0 && (
+            <span className="dock-badge" aria-hidden="true">
+              {profileBadge > 99 ? '99+' : profileBadge}
+            </span>
+          )}
           {it.icon}
           <span>{it.label}</span>
         </button>

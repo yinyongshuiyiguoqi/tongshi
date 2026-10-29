@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { translateText } from '../lib/agent';
 import { LANGUAGES } from '../lib/languages';
-import { canSpeak, speak, stopSpeaking } from '../lib/speech';
+import { canSpeak, isSpeaking, speak, stopSpeaking } from '../lib/speech';
+import { appendVoiceText, languageLabel, useVoiceInput } from '../lib/voiceInput';
 
 /** 包含中文，供源语言和目标语言共用 */
 const ALL_LANGS = [{ label: '中文', name: '中文', code: 'zh-CN' }, ...LANGUAGES];
@@ -21,65 +22,16 @@ export function Translator({ token }: { token: string }) {
   const [out, setOut] = useState('');
   const [detected, setDetected] = useState('');
   const [busy, setBusy] = useState(false);
-  const [listening, setListening] = useState(false);
   const [err, setErr] = useState('');
   const [speaking, setSpeaking] = useState(false);
-  const [speechOk, setSpeechOk] = useState(false);
-  const recog = useRef<any>(null);
+  const voice = useVoiceInput({
+    token,
+    onText: (text) => setInput((v) => appendVoiceText(v, text)),
+  });
 
   const target = ALL_LANGS.find((l) => l.code === to) ?? ALL_LANGS[1];
-  const source = ALL_LANGS.find((l) => l.code === from);
-
-  useEffect(() => {
-    const w = window as any;
-    const Ctor = w.SpeechRecognition || w.webkitSpeechRecognition;
-    if (!Ctor) return;
-
-    const r = new Ctor();
-    r.continuous = false;
-    r.interimResults = true;
-    r.onresult = (e: any) => {
-      const text = Array.from(e.results)
-        .map((x: any) => x[0].transcript)
-        .join('');
-      setInput(text);
-    };
-    r.onend = () => setListening(false);
-    r.onerror = () => {
-      setListening(false);
-      setErr('没听清，换个安静点的地方再试');
-    };
-    recog.current = r;
-    setSpeechOk(true);
-
-    return () => {
-      try {
-        r.abort();
-      } catch {
-        /* 忽略 */
-      }
-    };
-  }, []);
 
   useEffect(() => () => stopSpeaking(), []);
-
-  function toggleMic() {
-    if (!recog.current) return;
-    if (listening) {
-      recog.current.stop();
-      setListening(false);
-      return;
-    }
-    setErr('');
-    // 指定了源语言就按它听；自动识别时用系统语言听，交给模型判断
-    recog.current.lang = source?.code ?? navigator.language ?? 'zh-CN';
-    try {
-      recog.current.start();
-      setListening(true);
-    } catch {
-      setListening(false);
-    }
-  }
 
   async function run(text = input) {
     const t = text.trim();
@@ -123,7 +75,7 @@ export function Translator({ token }: { token: string }) {
     }
     setSpeaking(true);
     const timer = window.setInterval(() => {
-      if (!window.speechSynthesis.speaking) {
+      if (!isSpeaking()) {
         setSpeaking(false);
         window.clearInterval(timer);
       }
@@ -134,7 +86,7 @@ export function Translator({ token }: { token: string }) {
     <section className="translator">
       <div className="tr-head">
         <h3>翻译器</h3>
-        <span className="tr-hint">说不清对方说什么，先按一下听</span>
+        <span className="tr-hint">听不懂对方说什么，先按一下听</span>
       </div>
 
       <div className="tr-langs">
@@ -165,14 +117,25 @@ export function Translator({ token }: { token: string }) {
           rows={2}
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={listening ? '正在听…' : '说一句，或把对方的话打进来'}
+          placeholder={voice.recording ? '正在听…' : '说一句，或把对方的话打进来'}
         />
-        {speechOk && (
-          <button className={`tr-mic${listening ? ' is-on' : ''}`} onClick={toggleMic}>
-            {listening ? '停止' : '说话'}
-          </button>
-        )}
+        <button
+          type="button"
+          className={`tr-mic${voice.recording ? ' is-on' : ''}`}
+          onClick={voice.start}
+          disabled={voice.busy || (!voice.supported && !voice.recording)}
+        >
+          {voice.busy ? '识别中…' : voice.recording ? '停止' : '语音输入'}
+        </button>
       </div>
+      {(voice.error || !voice.supported || voice.language) && (
+        <p className="mic-hint">
+          {voice.error ||
+            (voice.language
+              ? `已识别为${languageLabel(voice.language)}`
+              : '当前浏览器不支持录音，请用文字输入')}
+        </p>
+      )}
 
       <div className="tr-actions">
         <button className="tr-go" onClick={() => run()} disabled={busy || !input.trim()}>

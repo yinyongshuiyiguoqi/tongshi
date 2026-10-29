@@ -1,4 +1,4 @@
-﻿import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { CaseItem } from '../data/cases';
 import { runBrief } from '../lib/agent';
 import { SpeakBar } from './SpeakBar';
@@ -9,7 +9,21 @@ import { SpeakBar } from './SpeakBar';
  * 情形库给的是审定过的通用流程，这一段负责「结合民警这句原话」——
  * 模型只看本次条文，答完再做一次条号核对，引用了没给出的条文就标出来。
  */
-export function CaseBrief({ item, input, token }: { item: CaseItem; input: string; token: string }) {
+export function CaseBrief({
+  item,
+  input,
+  token,
+  sectionId = 'answer-ai',
+  open = false,
+  onToggle,
+}: {
+  item: CaseItem;
+  input: string;
+  token: string;
+  sectionId?: string;
+  open?: boolean;
+  onToggle?: () => void;
+}) {
   const [text, setText] = useState('');
   const [steps, setSteps] = useState<string[]>([]);
   const [unmatched, setUnmatched] = useState<string[]>([]);
@@ -58,48 +72,71 @@ export function CaseBrief({ item, input, token }: { item: CaseItem; input: strin
   const lawCount = item.provisionIds.length;
 
   return (
-    <section className="r-block r-brief">
-      <div className="r-brief-head">
-        <h2>AI 研判</h2>
+    <section
+      id={sectionId}
+      className={`r-block r-brief answer-sec${open ? ' is-open' : ''}`}
+    >
+      <button
+        type="button"
+        className="fold-head r-brief-head"
+        aria-expanded={open}
+        aria-controls={`${sectionId}-panel`}
+        onClick={onToggle}
+      >
+        <h2>研判</h2>
         <span className="r-brief-tag">
           {state === 'run' ? '生成中' : `基于 ${lawCount} 条现行依据`}
         </span>
+        <span className="fold-chevron" aria-hidden="true">
+          <svg viewBox="0 0 20 20" width="18" height="18">
+            <path
+              d="M5 8l5 5 5-5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.7"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+        </span>
+      </button>
+
+      <div className="fold-panel" id={`${sectionId}-panel`} hidden={!open}>
+        {steps.length > 0 && state === 'run' && (
+          <ol className="trace r-brief-trace">
+            {steps.map((s, i) => (
+              <li key={i}>
+                <span className="tick" />
+                {s}
+              </li>
+            ))}
+          </ol>
+        )}
+
+        {state === 'fail' ? (
+          <p className="r-lead">{item.brief}</p>
+        ) : (
+          <p className="r-lead r-brief-text">
+            {text || (state === 'done' ? item.brief : '正在结合现场描述生成…')}
+            {state === 'run' && text && <span className="caret" />}
+          </p>
+        )}
+
+        {unmatched.length > 0 && (
+          <p className="r-warn">
+            研判中引用的 {unmatched.join('、')} 未出现在本次检索结果里，请人工核对后再使用。
+          </p>
+        )}
+
+        <div className="r-brief-actions">
+          <button onClick={() => setRound((r) => r + 1)} disabled={state === 'run'}>
+            重新生成
+          </button>
+          <span className="r-brief-note">AI 生成，仅作研判参考，处置决定由执法人员作出</span>
+        </div>
+
+        <SpeakBar text={state === 'fail' ? item.brief : text} token={token} />
       </div>
-
-      {steps.length > 0 && state === 'run' && (
-        <ol className="trace r-brief-trace">
-          {steps.map((s, i) => (
-            <li key={i}>
-              <span className="tick" />
-              {s}
-            </li>
-          ))}
-        </ol>
-      )}
-
-      {state === 'fail' ? (
-        <p className="r-lead">{item.brief}</p>
-      ) : (
-        <p className="r-lead r-brief-text">
-          {text || (state === 'done' ? item.brief : '正在结合现场描述生成…')}
-          {state === 'run' && text && <span className="caret" />}
-        </p>
-      )}
-
-      {unmatched.length > 0 && (
-        <p className="r-warn">
-          研判中引用的 {unmatched.join('、')} 未出现在本次检索结果里，请人工核对后再使用。
-        </p>
-      )}
-
-      <div className="r-brief-actions">
-        <button onClick={() => setRound((r) => r + 1)} disabled={state === 'run'}>
-          重新生成
-        </button>
-        <span className="r-brief-note">AI 生成，仅作研判参考，处置决定由执法人员作出</span>
-      </div>
-
-      <SpeakBar text={state === 'fail' ? item.brief : text} token={token} />
     </section>
   );
 }

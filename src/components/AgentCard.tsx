@@ -1,6 +1,7 @@
-﻿import { useState } from 'react';
+import { useState } from 'react';
 import type { AgentResult } from '../lib/agent';
 import type { LawArticle } from '../lib/legal';
+import { AnswerOutline, AnswerSection, useAnswerOutline } from './AnswerOutline';
 import { ScriptItem } from './ScriptItem';
 import { SpeakBar } from './SpeakBar';
 
@@ -29,6 +30,19 @@ export function AgentCard({
   const articlesText = articles
     .map((a) => `《${a.law}》${a.num}：${(a.content || '').slice(0, 80)}`)
     .join(' ');
+
+  const sections = [
+    ...(data.judgement ? [{ id: 'agent-judgement', title: '研判' }] : []),
+    ...(data.steps.length ? [{ id: 'agent-steps', title: '处置流程' }] : []),
+    ...(articles.length ? [{ id: 'agent-laws', title: '依据' }] : []),
+    ...(data.note ? [{ id: 'agent-note', title: '还需要核实' }] : []),
+  ];
+  const outline = useAnswerOutline(sections, {
+    'agent-judgement': false,
+    'agent-steps': false,
+    'agent-laws': false,
+    'agent-note': true,
+  });
 
   const full = [data.judgement, stepsText, data.scriptZh]
     .filter(Boolean)
@@ -85,17 +99,28 @@ export function AgentCard({
         </p>
       )}
 
+      <AnswerOutline sections={sections} active={outline.active} onJump={outline.jump} />
+
       {data.judgement && (
-        <section className="r-block">
-          <h2>AI 研判</h2>
+        <AnswerSection
+          id="agent-judgement"
+          title="研判"
+          open={outline.open['agent-judgement']}
+          onToggle={outline.toggle}
+        >
           <p className="r-lead">{data.judgement}</p>
           <SpeakBar text={data.judgement} token={token} />
-        </section>
+        </AnswerSection>
       )}
 
       {data.steps.length > 0 && (
-        <section className="r-block">
-          <h2>处置流程</h2>
+        <AnswerSection
+          id="agent-steps"
+          title="处置流程"
+          meta={`${data.steps.length} 步`}
+          open={outline.open['agent-steps']}
+          onToggle={outline.toggle}
+        >
           <ol className="r-steps">
             {data.steps.map((s, i) => (
               <li key={i}>
@@ -105,7 +130,7 @@ export function AgentCard({
             ))}
           </ol>
           <SpeakBar text={stepsText} token={token} />
-        </section>
+        </AnswerSection>
       )}
 
       {data.scriptZh && (
@@ -118,8 +143,15 @@ export function AgentCard({
       )}
 
       {articles.length > 0 && (
-        <section className="r-block">
-          <h2>依据</h2>
+        <AnswerSection
+          id="agent-laws"
+          title="依据"
+          meta={`${articles.length} 条`}
+          open={outline.open['agent-laws']}
+          onToggle={outline.toggle}
+          preview={`《${articles[0].law}》${articles[0].num || ''}`}
+          footer={<SpeakBar text={articlesText} token={token} />}
+        >
           <ul className="r-laws">
             {articles.map((a) => (
               <li key={a.id || `${a.law}${a.num}`}>
@@ -135,17 +167,23 @@ export function AgentCard({
               </li>
             ))}
           </ul>
-          <SpeakBar text={articlesText} token={token} />
-        </section>
+        </AnswerSection>
       )}
 
       {data.note && (
-        <section className="r-block r-notes">
+        <AnswerSection
+          id="agent-note"
+          title="还需要核实"
+          open={outline.open['agent-note']}
+          onToggle={outline.toggle}
+          className="answer-sec--notes"
+          footer={<SpeakBar text={data.note} token={token} />}
+        >
           <div className="r-note">
-            <b>还需要确认</b>
+            <b>待核实</b>
             <span>{data.note}</span>
           </div>
-        </section>
+        </AnswerSection>
       )}
 
       <p className="r-brief-note r-disclaimer">

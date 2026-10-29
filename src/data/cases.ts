@@ -30,6 +30,8 @@ export interface CaseItem {
   severity: '低' | '中' | '高';
   /** 用于相似度比较的完整描述 */
   scene: string;
+  /** 典型表述：只有和这里几乎一致（≥95%）的输入才直接调出预设 */
+  examples?: string[];
   /** 关键词及权重，命中即加分 */
   keywords: { w: string; weight: number }[];
   steps: string[];
@@ -61,6 +63,12 @@ export const CASES: CaseItem[] = [
     severity: '低',
     scene:
       '外籍人员在街面或者场所内被盘查时，无法出示护照、居留证件，只能提供照片、复印件，或者声称证件放在住处。',
+    examples: [
+      '小区门口一个外国人拿不出护照，只会说英语，问他来干什么也说不清',
+      '外籍人员没带护照，也拿不出居留证件',
+      '街面盘查时外国人无法出示护照和签证',
+      '老外说护照放在家里了，手机里只有照片',
+    ],
     keywords: [
       { w: '没带护照', weight: 3 },
       { w: '护照没带', weight: 3 },
@@ -103,6 +111,11 @@ export const CASES: CaseItem[] = [
     severity: '低',
     scene:
       '外籍人员在旅馆以外的住所居住或者住宿，超过二十四小时未到公安机关办理住宿登记，住在朋友家、租住的房屋或者单位宿舍。',
+    examples: [
+      '有个老外住在朋友家一个多星期了，一直没去派出所登记住宿',
+      '外国人在朋友家住了超过二十四小时没有办理住宿登记',
+      '房东没有给租房的外籍租客做住宿登记',
+    ],
     keywords: [
       { w: '没登记', weight: 3 },
       { w: '未登记', weight: 3 },
@@ -141,6 +154,11 @@ export const CASES: CaseItem[] = [
     severity: '中',
     scene:
       '外籍人员超过签证或者居留许可允许的停留期限仍在中国境内停留，所持签证已经过期，或者没有按期续签。',
+    examples: [
+      '外籍人员的签证过期了还留在境内',
+      '一个老外的签证已经过期半个多月，一直没有续签',
+      '外国人超过停留期限没有离境',
+    ],
     keywords: [
       { w: '签证过期', weight: 3 },
       { w: '过期', weight: 3 },
@@ -178,6 +196,11 @@ export const CASES: CaseItem[] = [
     severity: '中',
     scene:
       '外籍人员持旅游、探亲等非工作类签证在中国境内从事有报酬的劳动、经营或者提供劳务，没有取得工作许可。',
+    examples: [
+      '外国人在餐厅打工，拿的是旅游签证，没有工作许可',
+      '外籍人员持旅游签证送外卖赚钱',
+      '老外没有工作许可在培训机构教英语',
+    ],
     keywords: [
       { w: '打工', weight: 3 },
       { w: '非法就业', weight: 3 },
@@ -216,6 +239,11 @@ export const CASES: CaseItem[] = [
     severity: '中',
     scene:
       '外籍人员与中国公民或者另一名外籍人员发生口角、推搡、撕扯等肢体冲突，尚未造成明显伤害，现场有人围观。',
+    examples: [
+      '两个外国人和中国人在路边打架，有人围观',
+      '外籍人员和店主发生口角推搡，没有明显受伤',
+      '老外和邻居吵架动手撕扯',
+    ],
     keywords: [
       { w: '打架', weight: 3 },
       { w: '推搡', weight: 3 },
@@ -234,7 +262,7 @@ export const CASES: CaseItem[] = [
       '查看伤情，需要验伤的送医并固定证据',
       '双方自愿的可以组织调解；调解不成或伤情较重的，依法受案',
     ],
-    provisionIds: ['za-5', 'za-9'],
+    provisionIds: ['za-5', 'za-9', 'za-51', 'xing-234'],
     scripts: [
       {
         zh: '请两位先分开，各自说明情况。我们现在分别记录，不会只听一方。',
@@ -250,196 +278,6 @@ export const CASES: CaseItem[] = [
     brief:
       '先分开双方、分别取证，当面争辩只会激化。豁免身份要在这之前核实，否则后面所有程序都可能作废。',
     followUp: '有没有人受伤？伤情如何？双方是否同意调解？',
-  },
-  {
-    id: 'c-drunk',
-    title: '外籍人员醉酒滋事',
-    severity: '中',
-    scene:
-      '外籍人员处于醉酒状态，在公共场所大声喧哗、滋事，或者对自身及他人安全构成威胁，无法正常交流。',
-    keywords: [
-      { w: '醉酒', weight: 3 },
-      { w: '喝醉', weight: 3 },
-      { w: '耍酒疯', weight: 3 },
-      { w: '喝多', weight: 2 },
-      { w: '大声喧哗', weight: 2 },
-      { w: '滋事', weight: 2 },
-      { w: '闹事', weight: 2 },
-      { w: '不省人事', weight: 2 },
-      { w: '躺在地上', weight: 1 },
-    ],
-    steps: [
-      '先控制现场、疏散围观，评估是否存在自伤或伤人风险',
-      '对本人有危险或对他人有威胁的，采取保护性约束措施至酒醒',
-      '核查身份与证件，联系同行人员或者使领馆',
-      '酒醒后依法处理，全程录音录像并制作记录',
-    ],
-    provisionIds: ['za-15', 'za-10'],
-    scripts: [
-      {
-        zh: '您现在处于醉酒状态，为了您和他人的安全，我们需要对您采取保护性措施，等您清醒后再处理相关事项。',
-        en: 'You are intoxicated. For your safety and the safety of others, we need to take protective measures until you sober up.',
-      },
-    ],
-    risk:
-      '保护性约束不是处罚，不得使用械具过度限制，须持续观察身体状况，防止呕吐窒息等意外。',
-    brief:
-      '约束是为了安全，不是为了惩罚。清醒之前不谈责任，重点是看住人、防止呕吐窒息和自伤。',
-    followUp: '是否有同行人员？有没有受伤或者财物损坏？',
-  },
-  {
-    id: 'c-diplomat',
-    title: '涉案人员自称外交人员',
-    severity: '高',
-    scene:
-      '涉案外籍人员自称外交人员、领事官员或者国际组织人员，出示外交证件，可能享有外交特权与豁免。',
-    keywords: [
-      { w: '外交官', weight: 3 },
-      { w: '外交人员', weight: 3 },
-      { w: '外交豁免', weight: 3 },
-      { w: '豁免', weight: 3 },
-      { w: '使馆', weight: 3 },
-      { w: '领事', weight: 2 },
-      { w: '国际组织', weight: 2 },
-      { w: '外交证件', weight: 2 },
-    ],
-    steps: [
-      '立即停止一般处置程序，不得对其采取强制措施',
-      '查验外交身份证件，通过外事部门核实身份与豁免范围',
-      '逐级上报，通报外事部门，通过外交途径处理',
-      '做好现场记录，全程留痕，避免与外方发生直接冲突',
-    ],
-    provisionIds: ['wj', 'za-10'],
-    scripts: [
-      {
-        zh: '我们需要先核实您的身份。请出示外交身份证件，我们将通过外事部门确认后依法处理。',
-        en: 'We need to verify your identity first. Please show your diplomatic ID; we will confirm with the foreign affairs authorities before proceeding.',
-      },
-    ],
-    risk:
-      '豁免范围因身份类别不同而有别，不得自行判断。任何情况下都不得扣留外交人员或扣押其文书。',
-    brief:
-      '豁免不能由现场自行判断。停止一般处置、核实身份、逐级上报、走外事途径，顺序不能乱。',
-    followUp: '对方出示的是什么证件？所属机构是使馆、领馆还是国际组织？',
-  },
-  {
-    id: 'c-help',
-    title: '外籍人员求助（迷路、失物、语言不通）',
-    severity: '低',
-    scene:
-      '外籍人员因迷路、丢失财物、语言不通等原因向民警求助，本身不涉及违法行为，需要提供协助。',
-    keywords: [
-      { w: '迷路', weight: 3 },
-      { w: '找不到', weight: 3 },
-      { w: '找不着', weight: 3 },
-      { w: '求助', weight: 3 },
-      { w: '钱包被偷', weight: 3 },
-      { w: '钱包丢', weight: 3 },
-      { w: '被偷', weight: 2 },
-      { w: '丢东西', weight: 2 },
-      { w: '手机丢', weight: 2 },
-      { w: '丢了', weight: 2 },
-      { w: '语言不通', weight: 1 },
-      { w: '不会中文', weight: 1 },
-      { w: '不会说中文', weight: 1 },
-      { w: '问路', weight: 2 },
-      { w: '需要帮助', weight: 2 },
-      { w: '需要帮忙', weight: 2 },
-      { w: '走失', weight: 2 },
-    ],
-    steps: [
-      '先确认对方诉求，判断是求助还是报警',
-      '核实身份与证件，记录联系方式和住址',
-      '属求助的，提供指引或协助联系；属财物丢失的，按程序受理并出具证明',
-      '涉及使领馆协助的，告知其联系本国驻华使领馆',
-    ],
-    provisionIds: ['jc-9'],
-    scripts: [
-      {
-        zh: '请问您需要什么帮助？请慢慢说，我们会尽力协助。',
-        en: 'How can we help you? Please take your time; we will do our best to assist.',
-      },
-    ],
-    risk:
-      '求助类警情以协助为主，不要动辄要求出示证件或者带离现场，避免引起误解。',
-    brief:
-      '先问清诉求，再判断是求助还是报警。求助类不要一上来就查证件，容易让人误以为被当成嫌疑人。',
-    followUp: '对方具体需要什么帮助？是否涉及财物损失或者人身安全？',
-  },
-  {
-    id: 'c-traffic',
-    title: '涉外交通事故',
-    severity: '中',
-    scene:
-      '外籍人员驾驶机动车、非机动车或者骑行车辆发生交通事故，涉及车辆剐蹭、碰撞、人员受伤，需要现场处置与责任认定。',
-    keywords: [
-      { w: '交通事故', weight: 3 },
-      { w: '车祸', weight: 3 },
-      { w: '剐蹭', weight: 3 },
-      { w: '撞车', weight: 3 },
-      { w: '追尾', weight: 2 },
-      { w: '撞人', weight: 2 },
-      { w: '司机', weight: 2 },
-      { w: '骑车', weight: 1 },
-      { w: '保险', weight: 1 },
-      { w: '受伤', weight: 1 },
-    ],
-    steps: [
-      '立即保护现场，设置警示，疏导交通，避免二次事故',
-      '有人员受伤的先救助伤员并通知急救',
-      '通知交警部门到场处理，涉外的同时报告出入境管理部门',
-      '核查当事人身份、证件与车辆手续，固定现场证据',
-    ],
-    provisionIds: ['jc-9'],
-    scripts: [
-      {
-        zh: '请先不要移动车辆，我们正在保护现场。有人员受伤吗？请出示您的驾驶证和护照。',
-        en: 'Please do not move the vehicles. We are securing the scene. Is anyone injured? Please show your driving licence and passport.',
-      },
-    ],
-    risk:
-      '涉外交通事故的责任认定由交警部门依法作出，民警现场以救助、保护和核查为主，不要当场划分责任。',
-    brief:
-      '现场以救人、护场、核查为主，责任由交警认定。当场划责容易被理解为承诺，后面很难收回。',
-    followUp: '是否有人受伤？车辆是否影响通行？对方是否持有有效驾驶证？',
-  },
-  {
-    id: 'c-theft',
-    title: '外籍人员涉嫌盗窃',
-    severity: '中',
-    scene:
-      '外籍人员在商场、超市等经营场所盗窃商品，被店员或保安发现并控制，涉案金额与次数尚不明确。',
-    keywords: [
-      { w: '偷东西', weight: 3 },
-      { w: '盗窃', weight: 3 },
-      { w: '偷窃', weight: 3 },
-      { w: '偷了', weight: 3 },
-      { w: '顺手牵羊', weight: 2 },
-      { w: '没付钱', weight: 2 },
-      { w: '未付款', weight: 2 },
-      { w: '商品', weight: 1 },
-      { w: '超市', weight: 1 },
-      { w: '保安', weight: 1 },
-      { w: '监控', weight: 1 },
-    ],
-    steps: [
-      '控制现场，确认涉案人员身份与是否携带证件',
-      '调取监控、清点涉案商品并估价，固定物证与证人陈述',
-      '按涉案金额与次数判断是治安案件还是刑事案件，分别受案',
-      '依法处理，视情通报出入境管理部门与当事人国籍国使领馆',
-    ],
-    provisionIds: ['za-5', 'jc-9'],
-    scripts: [
-      {
-        zh: '请您配合我们核实情况。商品和监控记录我们先固定下来，稍后需要您说明经过。',
-        en: "Please cooperate while we verify what happened. We'll preserve the goods and the CCTV footage, and you will be asked to explain what occurred.",
-      },
-    ],
-    risk:
-      '涉案金额与次数决定案件性质，未查清前不要定性。不得以语言不通为由拖延受案，也不得当场要求赔偿了事。',
-    brief:
-      '先固定证据，再谈定性。金额和次数决定走治安还是刑事，现场不要急于给结论。',
-    followUp: '涉案金额多少？是否多次？有没有人身冲突或已赔偿？',
   },
 ];
 

@@ -5,19 +5,22 @@ export interface BackdropSetting {
   dataUrl?: string;
   /** 轮到第几张实景照片 */
   photo?: number;
+  /** 是否跟随自动轮换；false 表示用户手动固定了一张 */
+  auto?: boolean;
+  /** 自动模式下，这张图是哪一天选的（YYYY-MM-DD），用于按天轮换 */
+  day?: string;
 }
 
 const KEY = 'tongshi.backdrop';
 
 /**
- * 五张实景照片。
+ * 实景照片（当前 18 张）。
  *
  * light 是每张图的自然光源位置和色温，玻璃卡片的高光按它走，
  * 所以换一张图，反光方向也跟着变，而不是所有背景打同一个方向的灯。
  */
 export const PHOTOS = [
   { file: 'ridge.jpg', label: '云海群山', light: { x: '78%', y: '18%', rgb: '255, 196, 150' } },
-  { file: 'shore.jpg', label: '海岸晨光', light: { x: '24%', y: '22%', rgb: '255, 214, 178' } },
   { file: 'lagoon.jpg', label: '碧湖行舟', light: { x: '74%', y: '14%', rgb: '255, 240, 210' } },
   { file: 'woods.jpg', label: '林间透光', light: { x: '62%', y: '12%', rgb: '206, 232, 170' } },
   { file: 'snowpeak.jpg', label: '云上雪峰', light: { x: '50%', y: '18%', rgb: '226, 236, 250' } },
@@ -63,11 +66,83 @@ export function saveBackdrop(s: BackdropSetting) {
   }
 }
 
-/** 每次登录往后推一张，自己上传的照片不参与轮换 */
-export function nextBackdrop(s: BackdropSetting): BackdropSetting {
-  if (s.kind !== 'photo') return s;
-  return { kind: 'photo', photo: ((s.photo ?? -1) + 1) % PHOTOS.length };
+/** 防止 React StrictMode 开发模式把一次挂载跑两遍时连换两张 */
+let rotatedThisLoad = false;
+
+/** 最近用过的几张，避免短期内在几张之间来回跳 */
+const RECENT_KEY = 'tongshi.backdrop.recent';
+
+function loadRecent(): number[] {
+  try {
+    const raw = localStorage.getItem(RECENT_KEY);
+    const list = raw ? (JSON.parse(raw) as unknown) : [];
+    return Array.isArray(list) ? list.filter((n): n is number => Number.isInteger(n)) : [];
+  } catch {
+    return [];
+  }
 }
+
+function saveRecent(list: number[]) {
+  try {
+    localStorage.setItem(RECENT_KEY, JSON.stringify(list.slice(-4)));
+  } catch {
+    // 隐私模式写不进去就少一层防重复，不影响功能
+  }
+}
+
+function todayKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+
+/** 随机换一张：避开当前这张和最近用过的几张 */
+function pickDifferent(current: number): number {
+  if (PHOTOS.length <= 1) return 0;
+  const recent = new Set(loadRecent());
+  const all = PHOTOS.map((_, i) => i);
+  const preferred = all.filter((i) => i !== current && !recent.has(i));
+  const pool = preferred.length ? preferred : all.filter((i) => i !== current);
+  const next = pool[Math.floor(Math.random() * pool.length)] ?? 0;
+  saveRecent([...loadRecent(), next]);
+  return next;
+}
+
+/**
+ * 背景轮换规则（自动模式）：
+ * - 按自然日轮换：每天第一次打开换一张，同一天内刷新、登录、切页都不换；
+ * - 换图避开当前和最近 4 张，不连续重复；
+ * - 手动点选一张或上传照片后固定（auto=false），不再自动轮换；
+ * - 「恢复自动轮换」重新加入轮换；「换一张」可随时手动换，当天保持。
+ */
+export function rotateDaily(s: BackdropSetting): BackdropSetting | null {
+  if (rotatedThisLoad) return null;
+  if (s.kind !== 'photo' || s.auto === false) return null;
+  const today = todayKey();
+  if (s.day === today) return null;
+  rotatedThisLoad = true;
+  const next: BackdropSetting = {
+    kind: 'photo',
+    photo: pickDifferent(s.photo ?? 0),
+    auto: true,
+    day: today,
+  };
+  saveBackdrop(next);
+  return next;
+}
+
+/** 「换一张」/「恢复自动轮换」：立刻换一张，并算作当天的选择 */
+export function nextPhoto(s: BackdropSetting): BackdropSetting {
+  rotatedThisLoad = true;
+  const next: BackdropSetting = {
+    kind: 'photo',
+    photo: pickDifferent(s.photo ?? 0),
+    auto: true,
+    day: todayKey(),
+  };
+  saveBackdrop(next);
+  return next;
+}
+
 
 export function Backdrop({ setting }: { setting: BackdropSetting }) {
   return (

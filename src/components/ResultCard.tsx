@@ -1,9 +1,26 @@
-﻿import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { provisionById } from '../data/cases';
 import type { MatchResult } from '../lib/match';
+import { generateScripts, type ScriptPair } from '../lib/agent';
+import { AnswerOutline, AnswerSection, useAnswerOutline } from './AnswerOutline';
 import { CaseBrief } from './CaseBrief';
 import { ScriptItem } from './ScriptItem';
 import { SpeakBar } from './SpeakBar';
+
+/** 答案卡的二级目录：研判、处置流程、依据默认收起，还需要核实默认展开；现场话术常驻不折叠 */
+const SECTIONS = [
+  { id: 'answer-ai', title: '研判' },
+  { id: 'answer-steps', title: '处置流程' },
+  { id: 'answer-laws', title: '依据' },
+  { id: 'answer-notes', title: '还需要核实' },
+];
+
+const DEFAULT_OPEN: Record<string, boolean> = {
+  'answer-ai': false,
+  'answer-steps': false,
+  'answer-laws': false,
+  'answer-notes': true,
+};
 
 export function ResultCard({
   result,
@@ -22,6 +39,45 @@ export function ResultCard({
 }) {
   const { item, score, hits } = result;
   const [toast, setToast] = useState('');
+  const [scripts, setScripts] = useState<ScriptPair[]>(item.scripts);
+  const [scriptLoading, setScriptLoading] = useState(false);
+  const [scriptError, setScriptError] = useState('');
+  const [scriptRound, setScriptRound] = useState(0);
+  const outline = useAnswerOutline(SECTIONS, DEFAULT_OPEN);
+
+  useEffect(() => {
+    setScripts(item.scripts);
+    setScriptError('');
+    if (!input.trim()) return;
+
+    const ac = new AbortController();
+    setScriptLoading(true);
+    generateScripts(
+      {
+        input,
+        title: item.title,
+        brief: item.brief,
+        steps: item.steps,
+        provisionIds: item.provisionIds,
+      },
+      token,
+      ac.signal,
+    )
+      .then((list) => {
+        if (list.length) setScripts(list);
+        else setScriptError('模型暂时没有生成新话术，已使用标准话术');
+      })
+      .catch((err) => {
+        if (!ac.signal.aborted) {
+          setScriptError(err instanceof Error ? err.message : '话术生成失败，已使用标准话术');
+        }
+      })
+      .finally(() => {
+        if (!ac.signal.aborted) setScriptLoading(false);
+      });
+
+    return () => ac.abort();
+  }, [item, input, token, scriptRound]);
 
   const provisions = item.provisionIds
     .map((id) => provisionById(id))
@@ -37,11 +93,24 @@ export function ResultCard({
     window.setTimeout(() => setToast(''), 1800);
   }
 
-  const zh = item.scripts.map((s) => s.zh).join('\n');
-  const en = item.scripts
+  const zh = scripts.map((s) => s.zh).join('\n');
+  const en = scripts
     .map((s) => s.en)
     .filter(Boolean)
     .join('\n');
+
+  const lawPreview = provisions.length
+    ? `《${provisions[0].law}》${provisions[0].article ?? ''}`
+    : '本次未匹配到条文';
+  const regen = (
+    <button
+      className="r-regen"
+      onClick={() => setScriptRound((n) => n + 1)}
+      disabled={scriptLoading}
+    >
+      {scriptLoading ? '按现场生成中…' : '换一组'}
+    </button>
+  );
 
   return (
     <article className="rpage">
@@ -92,10 +161,28 @@ export function ResultCard({
         )}
       </header>
 
-      <CaseBrief item={item} input={input} token={token} />
+      <AnswerOutline
+        sections={SECTIONS}
+        active={outline.active}
+        onJump={outline.jump}
+      />
 
-      <section className="r-block">
-        <h2>处置流程</h2>
+      <CaseBrief
+        item={item}
+        input={input}
+        token={token}
+        sectionId="answer-ai"
+        open={outline.open['answer-ai']}
+        onToggle={() => outline.toggle('answer-ai')}
+      />
+
+      <AnswerSection
+        id="answer-steps"
+        title="处置流程"
+        meta={`${item.steps.length} 步`}
+        open={outline.open['answer-steps']}
+        onToggle={outline.toggle}
+      >
         <ol className="r-steps">
           {item.steps.map((s, i) => (
             <li key={i}>
@@ -107,19 +194,36 @@ export function ResultCard({
         <SpeakBar
           text={item.steps.map((s, i) => `${i + 1}、${s}`).join(' ')}
           token={token} />
-      </section>
+      </AnswerSection>
 
       <section className="r-block">
-        <h2>现场话术</h2>
+        <div className="r-scripts-head">
+          <h2>现场话术</h2>
+          {regen}
+        </div>
+        {scriptError && <p className="r-script-note">{scriptError}</p>}
         <div className="r-scripts">
-          {item.scripts.map((s, i) => (
-            <ScriptItem key={i} script={s} token={token} />
+          {scripts.map((s, i) => (
+            <ScriptItem key={`${i}-${s.zh}`} script={s} token={token} />
           ))}
         </div>
       </section>
 
-      <section className="r-block">
-        <h2>依据</h2>
+      <AnswerSection
+        id="answer-laws"
+        title="依据"
+        meta={provisions.length ? `${provisions.length} 条` : undefined}
+        open={outline.open['answer-laws']}
+        onToggle={outline.toggle}
+        preview={lawPreview}
+        footer={
+          <SpeakBar
+            text={provisions
+              .map((p) => `《${p.law}》${p.article}：${p.summary}`)
+              .join(' ')}
+            token={token} />
+        }
+      >
         <ul className="r-laws">
           {provisions.map((p) => (
             <li key={p.id}>
@@ -141,23 +245,29 @@ export function ResultCard({
             </li>
           ))}
         </ul>
-        <SpeakBar
-          text={provisions
-            .map((p) => `《${p.law}》${p.article}：${p.summary}`)
-            .join(' ')}
-          token={token} />
-      </section>
+      </AnswerSection>
 
-      <section className="r-block r-notes">
+      <AnswerSection
+        id="answer-notes"
+        title="还需要核实"
+        open={outline.open['answer-notes']}
+        onToggle={outline.toggle}
+        className="answer-sec--notes"
+        footer={
+          <SpeakBar
+            text={`注意：${item.risk} 还需要核实：${item.followUp}`}
+            token={token} />
+        }
+      >
         <div className="r-note">
           <b>注意</b>
           <span>{item.risk}</span>
         </div>
         <div className="r-note">
-          <b>还需要确认</b>
+          <b>待核实</b>
           <span>{item.followUp}</span>
         </div>
-      </section>
+      </AnswerSection>
 
     </article>
   );

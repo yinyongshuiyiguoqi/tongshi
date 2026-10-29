@@ -6,15 +6,16 @@ const EVENT = 'tongshi:prefs';
 
 /** 底栏质感：0 是液态玻璃（清、边缘折射强），1 是毛玻璃（糊）。默认偏液态 */
 export const DOCK_FROST_MAX = 0.9;
+const DOCK_FROST_DEFAULT = 0.14;
 
 export function loadDockFrost(): number {
   try {
     const raw = localStorage.getItem(DOCK_KEY);
-    if (raw === null) return 0.28;
+    if (raw === null) return DOCK_FROST_DEFAULT;
     const v = Number(raw);
-    return Number.isFinite(v) && v >= 0 && v <= DOCK_FROST_MAX ? v : 0.28;
+    return Number.isFinite(v) && v >= 0 && v <= DOCK_FROST_MAX ? v : DOCK_FROST_DEFAULT;
   } catch {
-    return 0.28;
+    return DOCK_FROST_DEFAULT;
   }
 }
 

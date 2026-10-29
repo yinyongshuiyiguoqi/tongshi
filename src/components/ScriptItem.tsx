@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { translateText } from '../lib/agent';
 import { LANGUAGES, type LangOption } from '../lib/languages';
-import { canSpeak, speak, stopSpeaking } from '../lib/speech';
+import { canSpeak, isSpeaking, speak, stopSpeaking } from '../lib/speech';
 
 /**
  * 一条现场话术。
@@ -24,17 +24,76 @@ export function ScriptItem({
   const [error, setError] = useState('');
   const wrapRef = useRef<HTMLDivElement>(null);
   const cache = useRef(new Map<string, string>());
+  const [selection, setSelection] = useState<{
+    text: string;
+    lang: string;
+  } | null>(null);
 
   useEffect(() => {
     if (!menu) return;
-    const onDown = (e: MouseEvent) => {
+    const onDown = (e: PointerEvent) => {
       if (!wrapRef.current?.contains(e.target as Node)) setMenu(false);
     };
-    window.addEventListener('mousedown', onDown);
-    return () => window.removeEventListener('mousedown', onDown);
+    window.addEventListener('pointerdown', onDown);
+    return () => window.removeEventListener('pointerdown', onDown);
   }, [menu]);
 
   useEffect(() => () => stopSpeaking(), []);
+
+  useEffect(() => {
+    const hide = () => setSelection(null);
+    let timer: number | undefined;
+
+    const refresh = () => {
+      const root = wrapRef.current;
+      const sel = window.getSelection();
+      if (!root || !sel || sel.isCollapsed || !sel.rangeCount) {
+        hide();
+        return;
+      }
+      const range = sel.getRangeAt(0);
+      if (!root.contains(range.commonAncestorContainer)) {
+        hide();
+        return;
+      }
+      const text = sel.toString().replace(/\s+/g, ' ').trim();
+      if (!text) {
+        hide();
+        return;
+      }
+
+      const start =
+        range.startContainer.nodeType === Node.TEXT_NODE
+          ? range.startContainer.parentElement
+          : (range.startContainer as Element);
+      const block = start?.closest('.r-zh,.r-en,.r-other');
+      if (!block || !root.contains(block)) {
+        hide();
+        return;
+      }
+
+      const lang = block.classList.contains('r-en')
+        ? 'en-US'
+        : block.classList.contains('r-other')
+          ? picked?.code || 'en-US'
+          : 'zh-CN';
+
+      setSelection({ text, lang });
+    };
+
+    const onChange = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(refresh, 30);
+    };
+
+    document.addEventListener('selectionchange', onChange);
+    window.addEventListener('scroll', hide, true);
+    return () => {
+      window.clearTimeout(timer);
+      document.removeEventListener('selectionchange', onChange);
+      window.removeEventListener('scroll', hide, true);
+    };
+  }, [picked]);
 
   async function choose(lang: LangOption) {
     setMenu(false);
@@ -76,11 +135,17 @@ export function ScriptItem({
     }
     setSpeaking(key);
     const timer = window.setInterval(() => {
-      if (!window.speechSynthesis.speaking) {
+      if (!isSpeaking()) {
         setSpeaking('');
         window.clearInterval(timer);
       }
     }, 400);
+  }
+
+  function readSelection() {
+    if (!selection) return;
+    speak(selection.text, selection.lang);
+    setSelection(null);
   }
 
   const other = picked && picked.code !== 'en-US';
@@ -102,6 +167,15 @@ export function ScriptItem({
       <div className="r-speak">
         {canSpeak() && (
           <>
+            <button
+              type="button"
+              className={`selection-speak-inline${selection ? ' is-ready' : ''}`}
+              onClick={readSelection}
+              disabled={!selection}
+              title={selection ? `朗读所选：${selection.text.slice(0, 24)}` : '先选中一段文字'}
+            >
+              朗读所选
+            </button>
             <button
               className={speaking === 'zh' ? 'is-on' : ''}
               onClick={() => toggle(script.zh, 'zh-CN', 'zh')}
@@ -147,6 +221,12 @@ export function ScriptItem({
           )}
         </div>
       </div>
+
+      {selection && (
+        <p className="r-selection-hint">
+          已选中 {selection.text.length} 字，点上方「朗读所选」只读这一段
+        </p>
+      )}
     </div>
   );
 }

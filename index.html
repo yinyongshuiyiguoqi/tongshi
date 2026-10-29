@@ -3,12 +3,34 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#0a0b10" />
+    <meta name="theme-color" content="#03060b" />
+    <link
+      rel="preload"
+      href="/fonts/inter-latin.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
     <title>通事 TONGSHI · 涉外执法现场助手</title>
     <link
       rel="icon"
-      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='9' fill='%230a0b10'/><path d='M9 11h14M16 11v12M11 17h10' stroke='%235b8cff' stroke-width='2' fill='none' stroke-linecap='round'/></svg>"
+      href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='9' fill='%2303060b'/><path d='M9 11h14M16 11v12M11 17h10' stroke='%2379dcdf' stroke-width='2' fill='none' stroke-linecap='round'/></svg>"
     />
+    <style>
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background:
+          radial-gradient(ellipse at 32% 28%, rgba(25, 109, 135, 0.18), transparent 58%),
+          radial-gradient(ellipse at 72% 70%, rgba(49, 67, 150, 0.16), transparent 58%),
+          #03060b;
+        color: #e8eef9;
+      }
+      #root {
+        min-height: 100dvh;
+      }
+    </style>
   </head>
   <body>
     <div id="root"></div>

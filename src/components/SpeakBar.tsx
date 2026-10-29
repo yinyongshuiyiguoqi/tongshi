@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { translateText } from '../lib/agent';
 import { LANGUAGES, type LangOption } from '../lib/languages';
-import { canSpeak, speak, stopSpeaking } from '../lib/speech';
+import { canSpeak, isSpeaking, speak, stopSpeaking } from '../lib/speech';
 
 /**
  * 任意一段结果的朗读条。
  *
- * 三个按钮跟现场话术那一行保持一致：播报中文 / Play English / Other languages…?
+ * 按钮跟现场话术那一行保持一致：朗读所选 / 播报中文 / Play English / Other languages…?
  * 没有现成英文的段落，按英文翻一遍再念。
+ * 「朗读所选」跟随页面上的选区，选哪段读哪段；没有选区时置灰。
  */
 export function SpeakBar({
   text,
@@ -18,24 +19,72 @@ export function SpeakBar({
   token: string;
   en?: string;
 }) {
-  const [speaking, setSpeaking] = useState<'' | 'zh' | 'en' | 'other'>('');
+  const [speaking, setSpeaking] = useState<'' | 'zh' | 'en' | 'other' | 'sel'>('');
   const [menu, setMenu] = useState(false);
   const [picked, setPicked] = useState<LangOption | null>(null);
   const [translated, setTranslated] = useState('');
   const [busy, setBusy] = useState<'' | 'en' | 'other'>('');
   const [err, setErr] = useState('');
+  const [selection, setSelection] = useState<{ text: string; lang: string } | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!menu) return;
-    const onDown = (e: MouseEvent) => {
+    const onDown = (e: PointerEvent) => {
       if (!wrapRef.current?.contains(e.target as Node)) setMenu(false);
     };
-    window.addEventListener('mousedown', onDown);
-    return () => window.removeEventListener('mousedown', onDown);
+    window.addEventListener('pointerdown', onDown);
+    return () => window.removeEventListener('pointerdown', onDown);
   }, [menu]);
 
   useEffect(() => () => stopSpeaking(), []);
+
+  // 跟随页面选区：选中的文字在英文块里按英文读，其他按中文读
+  useEffect(() => {
+    const onSelectionChange = () => {
+      const sel = window.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) {
+        setSelection(null);
+        return;
+      }
+      const text = sel.toString().replace(/\s+/g, ' ').trim();
+      if (!text) {
+        setSelection(null);
+        return;
+      }
+      const node = sel.getRangeAt(0).startContainer;
+      const el = node.nodeType === Node.TEXT_NODE ? node.parentElement : (node as Element);
+      const lang = el?.closest('.r-en')
+        ? 'en-US'
+        : el?.closest('.r-other')
+          ? picked?.code || 'zh-CN'
+          : 'zh-CN';
+      setSelection({ text, lang });
+    };
+    document.addEventListener('selectionchange', onSelectionChange);
+    return () => document.removeEventListener('selectionchange', onSelectionChange);
+  }, [picked]);
+
+  function readSelection() {
+    if (!selection) return;
+    if (speaking === 'sel') {
+      stopSpeaking();
+      setSpeaking('');
+      return;
+    }
+    if (!speak(selection.text, selection.lang)) {
+      setErr('当前浏览器不支持语音播报');
+      return;
+    }
+    setSpeaking('sel');
+    setErr('');
+    const timer = window.setInterval(() => {
+      if (!isSpeaking()) {
+        setSpeaking('');
+        window.clearInterval(timer);
+      }
+    }, 400);
+  }
 
   function toggle(say: string, lang: string, key: 'zh' | 'en' | 'other') {
     if (speaking === key) {
@@ -49,7 +98,7 @@ export function SpeakBar({
     }
     setSpeaking(key);
     const timer = window.setInterval(() => {
-      if (!window.speechSynthesis.speaking) {
+      if (!isSpeaking()) {
         setSpeaking('');
         window.clearInterval(timer);
       }
@@ -111,6 +160,16 @@ export function SpeakBar({
 
   return (
     <div className="speak-bar" ref={wrapRef}>
+      <button
+        type="button"
+        className={`selection-speak-inline${selection ? ' is-ready' : ''}`}
+        onClick={readSelection}
+        disabled={!selection}
+        title={selection ? `朗读所选：${selection.text.slice(0, 24)}` : '先在页面上选中一段文字'}
+      >
+        {speaking === 'sel' ? '停止' : '朗读所选'}
+      </button>
+
       <button className={speaking === 'zh' ? 'is-on' : ''} onClick={() => toggle(text, 'zh-CN', 'zh')}>
         {speaking === 'zh' ? '停止' : '播报中文'}
       </button>

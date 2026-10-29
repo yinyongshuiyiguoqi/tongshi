@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { CASES } from '../data/cases';
-import { LOW_CONFIDENCE, matchCases, type MatchResult } from '../lib/match';
+import { HIT_THRESHOLD, matchCases, type MatchResult } from '../lib/match';
 import { pushRecent } from '../lib/history';
 import type { Session } from '../lib/session';
 import { Empty } from './Empty';
@@ -9,9 +9,15 @@ import { AiFallback } from './AiFallback';
 import { FollowUp } from './FollowUp';
 import { Translator } from './Translator';
 import { isEnterSend, loadEnterSend, onPrefsChange } from '../lib/prefs';
+import { appendVoiceText, languageLabel, useVoiceInput } from '../lib/voiceInput';
 import { CaseLibrary, HistoryView, Profile } from './Views';
 import type { BackdropSetting } from './Backdrop';
 import { Dock, type TabKey } from './Dock';
+import { GlassCompanion } from './GlassCompanion';
+import { EdgeBlur } from './EdgeBlur';
+import { BrandMarkIcon } from './BrandMarkIcon';
+import { AgentNotice } from './AgentNotice';
+import { getAgentConfig } from '../lib/agent';
 
 const EXAMPLES = [
   '小区门口一个外国人拿不出护照，只会说英语，问他来干什么也说不清',
@@ -20,11 +26,13 @@ const EXAMPLES = [
 
 export function Workbench({
   session,
+  onSession,
   onLogout,
   backdrop,
   onBackdrop,
 }: {
   session: Session;
+  onSession: (s: Session) => void;
   onLogout: () => void;
   backdrop: BackdropSetting;
   onBackdrop: (s: BackdropSetting) => void;
@@ -33,55 +41,54 @@ export function Workbench({
   const [input, setInput] = useState('');
   const [query, setQuery] = useState('');
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [listening, setListening] = useState(false);
-  const [speechOk, setSpeechOk] = useState(false);
   const [toast, setToast] = useState('');
+  const [homeKey, setHomeKey] = useState(0);
+  const [brandBounce, setBrandBounce] = useState(false);
+  const [agentNotice, setAgentNotice] = useState(false);
+  const [agentSetupSignal, setAgentSetupSignal] = useState(0);
+  const [agentConfigured, setAgentConfigured] = useState<boolean | null>(null);
   const [enterSend, setEnterSend] = useState(loadEnterSend);
 
   useEffect(() => onPrefsChange(() => setEnterSend(loadEnterSend())), []);
-  const recog = useRef<any>(null);
+
+  // 每次登录进入工作台：只要 Agent 还没配置，就弹出一次设置公告。
+  // 已配置用户不弹；本次登录内手动关闭后不会反复骚扰，下次登录会再次提醒。
+  useEffect(() => {
+    let alive = true;
+    getAgentConfig(session.token)
+      .then((view) => {
+        if (!alive) return;
+        setAgentConfigured(Boolean(view.active.configured));
+        if (!view.active.configured) setAgentNotice(true);
+      })
+      .catch(() => {
+        // 网络异常时不打扰用户，Agent 设置页本身会显示错误。
+      });
+    return () => {
+      alive = false;
+    };
+  }, [session.token, session.user.badge]);
+
+  // 跳转信号只负责这一次展开；1.5s 后复位，之后重新进「我的」不会又被强制展开。
+  useEffect(() => {
+    if (!agentSetupSignal) return;
+    const id = window.setTimeout(() => setAgentSetupSignal(0), 1500);
+    return () => window.clearTimeout(id);
+  }, [agentSetupSignal]);
   const resultRef = useRef<HTMLElement>(null);
+  const voice = useVoiceInput({
+    token: session.token,
+    onText: (text) => setInput((v) => appendVoiceText(v, text)),
+  });
 
   const matches = useMemo(() => (query ? matchCases(query, CASES) : []), [query]);
-  const top = matches[0];
-  const active: MatchResult | undefined = matches.find((m) => m.item.id === activeId) ?? top;
-  const lowConfidence = !active || active.score < LOW_CONFIDENCE;
-
-  useEffect(() => {
-    const w = window as any;
-    const Ctor = w.SpeechRecognition || w.webkitSpeechRecognition;
-    if (Ctor) {
-      const r = new Ctor();
-      r.lang = 'zh-CN';
-      r.continuous = false;
-      r.interimResults = false;
-      r.onresult = (e: any) => {
-        const text = Array.from(e.results)
-          .map((x: any) => x[0].transcript)
-          .join('');
-        setInput((v) => (v ? v + '，' + text : text));
-      };
-      r.onend = () => setListening(false);
-      r.onerror = () => setListening(false);
-      recog.current = r;
-      setSpeechOk(true);
-    }
-  }, []);
-
-  function toggleSpeech() {
-    if (!recog.current) return;
-    if (listening) {
-      recog.current.stop();
-      setListening(false);
-    } else {
-      try {
-        recog.current.start();
-        setListening(true);
-      } catch {
-        setListening(false);
-      }
-    }
-  }
+  // 只有 ≥95% 相似度才调出情形库预设，其余交给 Agent 自主研判
+  const confident = useMemo(
+    () => matches.filter((m) => m.score >= HIT_THRESHOLD),
+    [matches],
+  );
+  const active: MatchResult | undefined =
+    confident.find((m) => m.item.id === activeId) ?? confident[0];
 
   function flash(msg: string) {
     setToast(msg);
@@ -101,8 +108,8 @@ export function Workbench({
     setQuery(text);
     setActiveId(null);
 
-    const found = matchCases(text, CASES);
-    if (found[0]) pushRecent(text, found[0].item.title);
+    const found = matchCases(text, CASES).filter((m) => m.score >= HIT_THRESHOLD);
+    pushRecent(text, found[0]?.item.title ?? 'Agent 研判');
 
     if (window.innerWidth < 1000) {
       window.setTimeout(scrollToResult, 80);
@@ -113,6 +120,30 @@ export function Workbench({
     setQuery('');
     setActiveId(null);
     setInput('');
+  }
+
+  function dismissAgentNotice() {
+    setAgentNotice(false);
+  }
+
+  function openAgentSetup() {
+    dismissAgentNotice();
+    setTab('profile');
+    setAgentSetupSignal((n) => n + 1);
+  }
+
+  function goHome() {
+    setTab('query');
+    setQuery('');
+    setActiveId(null);
+    setInput('');
+    setToast('');
+    // 重建查询主区，连同翻译器、追问和本地临时状态一起回到初始页
+    setHomeKey((k) => k + 1);
+    // 重新触发左上角的 Q 弹反馈
+    setBrandBounce(false);
+    window.requestAnimationFrame(() => setBrandBounce(true));
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function pick(text: string) {
@@ -126,10 +157,23 @@ export function Workbench({
   return (
     <div className="app">
       <header className="top">
-        <div className="brand">
-          <span className="mark">通事</span>
-          <span className="latin">TONGSHI</span>
-        </div>
+        <button
+          type="button"
+          className={`brand${brandBounce ? ' is-bouncing' : ''}`}
+          onClick={goHome}
+          onAnimationEnd={(e) => {
+            if (e.target === e.currentTarget) setBrandBounce(false);
+          }}
+          aria-label="回到通事首页"
+        >
+          <span className="brand-logo">
+            <BrandMarkIcon />
+          </span>
+          <span className="brand-word">
+            <span className="mark">通事</span>
+            <span className="latin">TONGSHI</span>
+          </span>
+        </button>
         <span className="divider" />
         <span className="sub">涉外执法现场辅助</span>
         <div className="top-right">
@@ -140,9 +184,9 @@ export function Workbench({
       </header>
 
       {tab === 'query' && (
-        <main className={`work${query ? '' : ' is-idle'}`}>
+        <main key={homeKey} className={`work${query ? '' : ' is-idle'}`}>
           <section className="compose">
-            <h2>现场情况</h2>
+            <h2>AI 现场研判</h2>
             <p className="hint-line">
               用平时的说法描述就行，不用套格式。时间、地点、国籍、对方说了什么，知道多少写多少。
             </p>
@@ -156,17 +200,24 @@ export function Workbench({
                   analyse();
                 }
               }}
-              placeholder="例如：小区门口一个外国人拿不出护照，只会说英语……"
+              placeholder={
+                voice.recording
+                  ? '正在听…'
+                  : '例如：小区门口一个外国人拿不出护照，只会说英语……'
+              }
               rows={7}
               spellCheck={false}
             />
 
             <div className="compose-actions">
-              {speechOk && (
-                <button className={`mic${listening ? ' is-rec' : ''}`} onClick={toggleSpeech}>
-                  {listening ? '正在听…' : '语音输入'}
-                </button>
-              )}
+              <button
+                type="button"
+                className={`mic${voice.recording ? ' is-rec' : ''}`}
+                onClick={voice.start}
+                disabled={voice.busy || (!voice.supported && !voice.recording)}
+              >
+                {voice.busy ? '识别中…' : voice.recording ? '停止' : '语音输入'}
+              </button>
               <button className="primary" onClick={analyse}>
                 查找处置方案
               </button>
@@ -176,6 +227,16 @@ export function Workbench({
                 </button>
               )}
             </div>
+            {(voice.error ||
+              (voice.supported && voice.language) ||
+              !voice.supported) && (
+              <p className="mic-hint">
+                {voice.error ||
+                  (voice.language
+                    ? `已识别为${languageLabel(voice.language)}`
+                    : '当前浏览器不支持录音，请用文字输入')}
+              </p>
+            )}
             <p className="kbd-tip">
               {enterSend ? 'Enter 提交 · Shift + Enter 换行' : 'Ctrl + Enter 提交'}
             </p>
@@ -200,8 +261,8 @@ export function Workbench({
             {query && active && (
               <ResultCard
                 result={active}
-                matches={matches}
-                low={lowConfidence}
+                matches={confident}
+                low={false}
                 onPick={(id) => setActiveId(id)}
                 input={query}
                 token={session.token}
@@ -215,6 +276,8 @@ export function Workbench({
                 title={active?.item.title ?? ''}
                 brief={active?.item.brief ?? ''}
                 provisionIds={active?.item.provisionIds ?? []}
+                baseScripts={active?.item.scripts ?? []}
+                baseSteps={active?.item.steps ?? []}
               />
             )}
           </section>
@@ -237,14 +300,28 @@ export function Workbench({
         <main className="work single">
           <Profile
             session={session}
+            onSession={onSession}
             onLogout={onLogout}
             backdrop={backdrop}
             onBackdrop={onBackdrop}
+            agentSetupSignal={agentSetupSignal}
+            agentUnconfigured={agentConfigured === false}
+            onAgentConfiguredChange={setAgentConfigured}
           />
         </main>
       )}
 
-      <Dock value={tab} onChange={setTab} />
+      {agentNotice && <AgentNotice onConfigure={openAgentSetup} onClose={dismissAgentNotice} />}
+
+      <EdgeBlur />
+      <GlassCompanion />
+
+      <Dock
+        value={tab}
+        onChange={setTab}
+        backdrop={backdrop}
+        profileBadge={agentConfigured === false ? 1 : 0}
+      />
 
       {toast && <div className="toast">{toast}</div>}
     </div>

@@ -15,6 +15,7 @@ export function AiFallback({ input, token }: { input: string; token: string }) {
   const [lawFallback, setLawFallback] = useState('');
   const [result, setResult] = useState<AgentResult | null>(null);
   const [unmatched, setUnmatched] = useState<string[]>([]);
+  const [agentError, setAgentError] = useState('');
   const [lawState, setLawState] = useState<'off' | 'ok' | 'error'>(
     hasLawApi ? 'ok' : 'off',
   );
@@ -29,6 +30,7 @@ export function AiFallback({ input, token }: { input: string; token: string }) {
     setLawFallback('');
     setResult(null);
     setUnmatched([]);
+    setAgentError('');
 
     let cancelled = false;
     const ac = new AbortController();
@@ -68,6 +70,7 @@ export function AiFallback({ input, token }: { input: string; token: string }) {
                 break;
               case 'error':
                 agentFailed = true;
+                setAgentError(e.message || 'AI 服务暂时不可用');
                 break;
             }
           },
@@ -170,6 +173,12 @@ export function AiFallback({ input, token }: { input: string; token: string }) {
         <p className="low-warn">
           在线法规检索失败（{lawFallback}），本次依据已回退本地法条库。请检查
           LAW_API_KEY 或稍后重试。
+        </p>
+      )}
+
+      {agentError && (
+        <p className="low-warn">
+          AI 服务返回错误：{agentError.slice(0, 160)}。已尝试本地降级；如果仍为空，请稍后重试。
         </p>
       )}
 
