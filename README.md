@@ -1,5 +1,8 @@
 # 通事 TONGSHI · 涉外执法现场助手
 
+[![CI](https://github.com/yinyongshuiyiguoqi/tongshi/actions/workflows/ci.yml/badge.svg)](https://github.com/yinyongshuiyiguoqi/tongshi/actions/workflows/ci.yml)
+
+
 传智杯参赛作品。民警登录后，用自己的话描述现场情况：和情形库典型表述达到 95% 相似度的，
 直接给出人工核定的处置流程、依据和话术；其余交给 Agent 自主研判。
 
