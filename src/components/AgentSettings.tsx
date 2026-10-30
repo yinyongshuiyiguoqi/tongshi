@@ -13,42 +13,141 @@ import {
 
 const PROVIDERS = [
   {
+    id: 'deepseek',
     name: 'DeepSeek',
     base: 'https://api.deepseek.com',
     model: 'deepseek-flash',
     keyUrl: 'https://platform.deepseek.com/api_keys',
   },
   {
+    id: 'zhipu',
     name: '智谱 GLM',
     base: 'https://open.bigmodel.cn/api/paas/v4',
     model: 'glm-4-flash',
     keyUrl: 'https://open.bigmodel.cn/usercenter/apikeys',
   },
   {
+    id: 'dashscope',
     name: '通义千问',
     base: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
     model: 'qwen-plus',
     keyUrl: 'https://bailian.console.aliyun.com/',
   },
   {
+    id: 'moonshot',
     name: 'Moonshot',
     base: 'https://api.moonshot.cn/v1',
     model: 'moonshot-v1-8k',
     keyUrl: 'https://platform.moonshot.cn/console/api-keys',
   },
   {
+    id: 'openai',
     name: 'OpenAI',
     base: 'https://api.openai.com/v1',
     model: 'gpt-4o-mini',
     keyUrl: 'https://platform.openai.com/api-keys',
   },
   {
+    id: 'siliconflow',
     name: '硅基流动',
     base: 'https://api.siliconflow.cn/v1',
     model: 'Qwen/Qwen2.5-7B-Instruct',
     keyUrl: 'https://cloud.siliconflow.cn/account/ak',
   },
+  {
+    id: 'hunyuan',
+    name: '腾讯混元',
+    base: 'https://api.hunyuan.cloud.tencent.com/v1',
+    model: 'hunyuan-turbos-latest',
+    keyUrl: 'https://console.cloud.tencent.com/hunyuan/api-key',
+  },
+  {
+    id: 'qianfan',
+    name: '百度千帆',
+    base: 'https://qianfan.baidubce.com/v2',
+    model: 'ernie-4.5-turbo-128k',
+    keyUrl: 'https://console.bce.baidu.com/qianfan/ais/console/apiKey',
+  },
+  {
+    id: 'gemini',
+    name: 'Google Gemini',
+    base: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    model: 'gemini-2.0-flash',
+    keyUrl: 'https://aistudio.google.com/app/apikey',
+  },
+  {
+    id: 'groq',
+    name: 'Groq',
+    base: 'https://api.groq.com/openai/v1',
+    model: 'llama-3.3-70b-versatile',
+    keyUrl: 'https://console.groq.com/keys',
+  },
+  {
+    id: 'openrouter',
+    name: 'OpenRouter',
+    base: 'https://openrouter.ai/api/v1',
+    model: 'deepseek/deepseek-chat-v3-0324',
+    keyUrl: 'https://openrouter.ai/keys',
+  },
 ];
+
+/** 每家给三档预设：极速 / 均衡 / 深度；识别到可用模型后直接点选 */
+const MODEL_TIERS: Record<string, { tier: string; model: string; hint: string }[]> = {
+  deepseek: [
+    { tier: '极速', model: 'deepseek-flash', hint: '日常快答' },
+    { tier: '均衡', model: 'deepseek-chat', hint: '综合最稳' },
+    { tier: '深度', model: 'deepseek-v4-pro', hint: '复杂研判' },
+    { tier: '推理', model: 'deepseek-reasoner', hint: '分步推理' },
+  ],
+  openai: [
+    { tier: '轻快', model: 'gpt-4o-mini', hint: '低成本' },
+    { tier: '均衡', model: 'gpt-4.1-mini', hint: '综合' },
+    { tier: '旗舰', model: 'gpt-4o', hint: '最强' },
+  ],
+  zhipu: [
+    { tier: '极速', model: 'glm-4-flash', hint: '免费/快' },
+    { tier: '均衡', model: 'glm-4-air', hint: '综合' },
+    { tier: '深度', model: 'glm-4-plus', hint: '复杂任务' },
+  ],
+  dashscope: [
+    { tier: '极速', model: 'qwen-turbo', hint: '低延迟' },
+    { tier: '均衡', model: 'qwen-plus', hint: '综合' },
+    { tier: '深度', model: 'qwen-max', hint: '最强' },
+  ],
+  moonshot: [
+    { tier: '短文本', model: 'moonshot-v1-8k', hint: '日常' },
+    { tier: '长文本', model: 'moonshot-v1-32k', hint: '长材料' },
+    { tier: '超长', model: 'moonshot-v1-128k', hint: '整卷宗' },
+  ],
+  siliconflow: [
+    { tier: '极速', model: 'Qwen/Qwen2.5-7B-Instruct', hint: '轻量' },
+    { tier: '均衡', model: 'deepseek-ai/DeepSeek-V3', hint: '综合' },
+    { tier: '深度', model: 'Qwen/Qwen2.5-72B-Instruct', hint: '复杂' },
+  ],
+  hunyuan: [
+    { tier: '极速', model: 'hunyuan-lite', hint: '轻量' },
+    { tier: '均衡', model: 'hunyuan-turbos-latest', hint: '综合' },
+    { tier: '深度', model: 'hunyuan-pro', hint: '复杂' },
+  ],
+  gemini: [
+    { tier: '极速', model: 'gemini-2.0-flash', hint: '快' },
+    { tier: '均衡', model: 'gemini-2.0-flash-lite', hint: '低成本' },
+    { tier: '深度', model: 'gemini-1.5-pro', hint: '长文本' },
+  ],
+  groq: [
+    { tier: '极速', model: 'llama-3.1-8b-instant', hint: '最快' },
+    { tier: '均衡', model: 'llama-3.3-70b-versatile', hint: '综合' },
+  ],
+  openrouter: [
+    { tier: '均衡', model: 'deepseek/deepseek-chat-v3-0324', hint: '性价比' },
+    { tier: '旗舰', model: 'openai/gpt-4o', hint: '最强' },
+  ],
+  qianfan: [
+    { tier: '极速', model: 'ernie-speed-8k', hint: '轻量' },
+    { tier: '均衡', model: 'ernie-4.5-turbo-128k', hint: '综合' },
+    { tier: '深度', model: 'ernie-4.5-8k-preview', hint: '复杂' },
+  ],
+};
 
 function Icon({ name }: { name: 'copy' | 'edit' | 'trash' | 'eye' }) {
   if (name === 'copy') {
@@ -325,6 +424,12 @@ export function AgentSettings({
   }
 
   const showProviders = Boolean(view && !view.active.hasOwnKey);
+  const tierOptions = (probe ? MODEL_TIERS[probe.provider.id] || [] : []).filter((t) =>
+    probe?.models.includes(t.model),
+  );
+  const orderedModels = probe
+    ? [probe.recommended, ...probe.models.filter((m) => m !== probe.recommended)].filter(Boolean)
+    : [];
 
   return (
     <div className="agent-settings">
@@ -447,6 +552,13 @@ export function AgentSettings({
                       >
                         重新识别
                       </button>
+                      <button
+                        type="button"
+                        className="agent-probe-retry"
+                        onClick={() => setProbe(null)}
+                      >
+                        换服务商
+                      </button>
                     </>
                   ) : (
                     <span className="agent-probe-error">{probeError}</span>
@@ -501,7 +613,7 @@ export function AgentSettings({
                     setSuccess('');
                   }}
                 >
-                  {probe.models.map((m) => (
+                  {orderedModels.map((m) => (
                     <option key={m} value={m}>
                       {m}
                       {m === probe.recommended ? '（推荐）' : ''}
@@ -524,6 +636,31 @@ export function AgentSettings({
                 />
               )}
             </label>
+
+            {tierOptions.length > 0 && (
+              <div className="agent-model-tiers">
+                <span className="agent-model-tiers-title">预设推荐 · 点一下直接选</span>
+                <div className="agent-model-tier-row">
+                  {tierOptions.map((t) => (
+                    <button
+                      key={t.model}
+                      type="button"
+                      className={`agent-model-tier${model === t.model ? ' is-on' : ''}`}
+                      onClick={() => {
+                        setModel(t.model);
+                        setManualModel(false);
+                        setError('');
+                        setSuccess('');
+                      }}
+                    >
+                      <b>{t.tier}</b>
+                      <span>{t.model}</span>
+                      <em>{t.hint}</em>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
             {probe && probe.models.length > 0 && (
               <div className="agent-model-tools">
                 <span className="agent-model-count">

@@ -215,6 +215,37 @@ const AGENT_PROVIDERS = [
     recommend: ['Qwen/Qwen2.5-7B-Instruct', 'deepseek-ai/DeepSeek-V3'],
   },
   {
+    id: 'hunyuan',
+    name: '腾讯混元',
+    base: 'https://api.hunyuan.cloud.tencent.com/v1',
+    recommend: ['hunyuan-turbos-latest', 'hunyuan-lite', 'hunyuan-pro'],
+  },
+  {
+    id: 'qianfan',
+    name: '百度千帆',
+    base: 'https://qianfan.baidubce.com/v2',
+    recommend: ['ernie-4.5-turbo-128k', 'ernie-speed-8k', 'ernie-4.5-8k-preview'],
+  },
+  {
+    id: 'gemini',
+    name: 'Google Gemini',
+    base: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    recommend: ['gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-1.5-pro'],
+  },
+  {
+    id: 'spark',
+    name: '讯飞星火',
+    base: 'https://spark-api-open.xf-yun.com/v1',
+    recommend: ['generalv3.5', '4.0Ultra', 'lite'],
+  },
+  {
+    id: 'ark',
+    name: '火山方舟',
+    base: 'https://ark.cn-beijing.volces.com/api/v3',
+    // 方舟的模型名通常是控制台里的推理接入点 ID（ep-...），这里不写死
+    recommend: [],
+  },
+  {
     id: 'groq',
     name: 'Groq',
     base: 'https://api.groq.com/openai/v1',

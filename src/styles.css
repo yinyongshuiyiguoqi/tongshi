@@ -5627,3 +5627,62 @@ button.brand.is-bouncing .brand-word {
   font-size: 11.5px;
   color: var(--faint);
 }
+
+.agent-model-tiers {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.agent-model-tiers-title {
+  font-size: 11.5px;
+  color: var(--muted);
+}
+
+.agent-model-tier-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.agent-model-tier {
+  flex: 1 1 30%;
+  min-width: 100px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(255, 255, 255, 0.03);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.agent-model-tier b {
+  font-size: 11px;
+  color: #cfe0ff;
+}
+
+.agent-model-tier span {
+  font-size: 11px;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.agent-model-tier em {
+  font-style: normal;
+  font-size: 10.5px;
+  color: var(--faint);
+}
+
+.agent-model-tier.is-on {
+  border-color: rgba(91, 140, 255, 0.65);
+  background: rgba(91, 140, 255, 0.14);
+}
+
+.agent-model-tier:hover {
+  border-color: rgba(91, 140, 255, 0.5);
+}
+
