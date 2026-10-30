@@ -224,6 +224,8 @@ const AGENT_PROVIDERS = [
     id: 'openrouter',
     name: 'OpenRouter',
     base: 'https://openrouter.ai/api/v1',
+    // OpenRouter 的 /models 是公开可读的，必须用一个需要鉴权的 /key 来验证 Key
+    verifyPath: '/key',
     recommend: ['deepseek/deepseek-chat-v3-0324', 'openai/gpt-4o-mini'],
   },
   {
@@ -275,6 +277,14 @@ async function probeProviderModels(provider, apiKey) {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), 6500);
   try {
+    // 少数服务商的 /models 可匿名读取，先打一个需要鉴权的端点确认 Key 真属于它
+    if (provider.verifyPath) {
+      const authRes = await fetch(`${base}${provider.verifyPath}`, {
+        headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+        signal: ctrl.signal,
+      });
+      if (!authRes.ok) return null;
+    }
     const res = await fetch(`${base}/models`, {
       headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
       signal: ctrl.signal,
@@ -2555,7 +2565,7 @@ const server = http.createServer(async (req, res) => {
     }
 
     // 智谱等不开放 /models 的服务商：按 Key 格式给固定模型表，交给用户确认
-    if (guessed) {
+    if (guessed && !guessed.verifyPath) {
       const { models, recommended } = cleanModelList(guessed, guessed.recommend);
       res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
       res.end(JSON.stringify(view(guessed, models, recommended, false, 'key')));

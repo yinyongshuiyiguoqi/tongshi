@@ -112,6 +112,7 @@ export function AgentSettings({
   const [probeError, setProbeError] = useState('');
   const [manualModel, setManualModel] = useState(false);
   const probeTimer = useRef<number | null>(null);
+  const probeSeq = useRef(0);
 
   useEffect(() => {
     return () => {
@@ -134,10 +135,13 @@ export function AgentSettings({
 
   async function identifyKey(key: string) {
     if (!key) return;
+    const seq = ++probeSeq.current;
     setProbing(true);
     setProbeError('');
     try {
       const data = await probeAgentKey(token, key);
+      // 用户可能已经改了 Key；只认最后一次请求
+      if (seq !== probeSeq.current) return;
       setProbe(data);
       setBase(data.provider.base);
       setManualModel(false);
@@ -148,6 +152,7 @@ export function AgentSettings({
         }，选好模型后保存。`,
       );
     } catch (err) {
+      if (seq !== probeSeq.current) return;
       setProbe(null);
       setProbeError(err instanceof Error ? err.message : '没能自动识别这个 API Key');
     } finally {
@@ -448,7 +453,7 @@ export function AgentSettings({
             </div>
           )}
 
-          {showProviders && (
+          {showProviders && !probe && (
             <div className="agent-providers">
               <p className="agent-provider-title">快速接入常见大模型</p>
               <div className="agent-provider-grid">
