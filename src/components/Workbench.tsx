@@ -16,6 +16,7 @@ import { Dock, type TabKey } from './Dock';
 import { GlassCompanion } from './GlassCompanion';
 import { EdgeBlur } from './EdgeBlur';
 import { BrandMarkIcon } from './BrandMarkIcon';
+import { VoiceWave } from './VoiceWave';
 import { AgentNotice } from './AgentNotice';
 import { getAgentConfig } from '../lib/agent';
 
@@ -216,7 +217,16 @@ export function Workbench({
                 onClick={voice.start}
                 disabled={voice.busy || (!voice.supported && !voice.recording)}
               >
-                {voice.busy ? '识别中…' : voice.recording ? '停止' : '语音输入'}
+                {voice.busy ? (
+                  '识别中…'
+                ) : voice.recording ? (
+                  <>
+                    <VoiceWave levels={voice.levels} />
+                    <span>停止</span>
+                  </>
+                ) : (
+                  '语音输入'
+                )}
               </button>
               <button className="primary" onClick={analyse}>
                 查找处置方案

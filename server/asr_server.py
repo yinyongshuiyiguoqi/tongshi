@@ -9,6 +9,7 @@ import os
 import subprocess
 import tempfile
 import threading
+from urllib.parse import urlparse, parse_qs
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 import numpy as np
@@ -59,6 +60,35 @@ def load_engine():
     whisper = WhisperModel("tiny", device="cpu", compute_type="int8", download_root=MODEL_DIR)
     engine = "whisper"
     print("asr ready: whisper", flush=True)
+
+
+def ensure_whisper():
+    global whisper
+    if whisper is not None:
+        return whisper
+    from faster_whisper import WhisperModel
+
+    print("loading faster-whisper tiny (multilingual) ...", flush=True)
+    whisper = WhisperModel("tiny", device="cpu", compute_type="int8", download_root=MODEL_DIR)
+    return whisper
+
+
+def preload_multilingual():
+    """开机把多语种 Whisper 一起加载，避免第一次说俄语/阿拉伯语再等 8 秒。"""
+    if os.environ.get("ASR_PRELOAD_MULTILINGUAL", "1") != "1":
+        return
+    if whisper is not None:
+        print("asr multilingual already loaded", flush=True)
+        return
+    try:
+        ensure_whisper()
+        warm_path = os.path.join(SENSE_DIR, "warmup.mp3")
+        if os.path.isfile(warm_path):
+            transcribe_whisper(warm_path)
+        print("asr multilingual ready: whisper", flush=True)
+    except Exception as exc:
+        # 预加载失败不能阻断主识别，首次多语种请求仍会懒加载重试。
+        print(f"asr multilingual preload failed: {exc}", flush=True)
 
 
 def normalize_lang(raw):
@@ -124,6 +154,8 @@ def transcribe_sense(path):
 
 
 def transcribe_whisper(path):
+    if whisper is None:
+        ensure_whisper()
     with lock:
         segments, info = whisper.transcribe(
             path,
@@ -141,7 +173,12 @@ def transcribe_whisper(path):
     }
 
 
-def transcribe(path):
+def transcribe(path, requested_engine=""):
+    requested = (requested_engine or "").strip().lower()
+    if requested == "whisper":
+        return transcribe_whisper(path)
+    if requested == "sensevoice":
+        return transcribe_sense(path)
     if engine == "sensevoice":
         return transcribe_sense(path)
     return transcribe_whisper(path)
@@ -170,10 +207,12 @@ class Handler(BaseHTTPRequestHandler):
         print("asr", fmt % args, flush=True)
 
     def do_POST(self):
-        if self.path != "/asr":
+        parsed = urlparse(self.path)
+        if parsed.path != "/asr":
             self.send_response(404)
             self.end_headers()
             return
+        requested_engine = (parse_qs(parsed.query).get("engine") or [""])[0]
 
         try:
             length = int(self.headers.get("Content-Length", "0"))
@@ -192,7 +231,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             with os.fdopen(fd, "wb") as f:
                 f.write(data)
-            payload = transcribe(path)
+            payload = transcribe(path, requested_engine)
             body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(200)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -216,4 +255,5 @@ class Handler(BaseHTTPRequestHandler):
 if __name__ == "__main__":
     load_engine()
     warmup()
+    preload_multilingual()
     ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()

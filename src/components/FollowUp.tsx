@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { runChat, type ChatAnswer, type ChatMessage } from '../lib/agent';
 import { appendVoiceText, languageLabel, useVoiceInput } from '../lib/voiceInput';
+import { VoiceWave } from './VoiceWave';
 import { isEnterSend, loadEnterSend, onPrefsChange } from '../lib/prefs';
 import { AnswerOutline, AnswerSection, useAnswerOutline } from './AnswerOutline';
 import { ScriptItem } from './ScriptItem';
@@ -339,7 +340,16 @@ export function FollowUp({
           aria-label={voice.recording ? '停止语音输入' : '语音输入'}
           title={voice.supported ? '语音输入' : '当前浏览器不支持录音'}
         >
-          {voice.busy ? '识别中…' : voice.recording ? '停止' : '语音输入'}
+          {voice.busy ? (
+            '识别中…'
+          ) : voice.recording ? (
+            <>
+              <VoiceWave levels={voice.levels} />
+              <span>停止</span>
+            </>
+          ) : (
+            '语音输入'
+          )}
         </button>
         <button className="primary" onClick={ask} disabled={busy || !input.trim()}>
           {busy ? '回答中' : '发送'}

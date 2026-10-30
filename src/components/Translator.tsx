@@ -3,6 +3,7 @@ import { translateText } from '../lib/agent';
 import { LANGUAGES } from '../lib/languages';
 import { canSpeak, isSpeaking, speak, stopSpeaking } from '../lib/speech';
 import { appendVoiceText, languageLabel, useVoiceInput } from '../lib/voiceInput';
+import { VoiceWave } from './VoiceWave';
 
 /** 包含中文，供源语言和目标语言共用 */
 const ALL_LANGS = [{ label: '中文', name: '中文', code: 'zh-CN' }, ...LANGUAGES];
@@ -24,18 +25,56 @@ export function Translator({ token }: { token: string }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const [speaking, setSpeaking] = useState(false);
+  const engine = from === AUTO
+    ? 'whisper'
+    : ['zh-CN', 'en-US', 'ja-JP', 'ko-KR'].includes(from)
+      ? 'sensevoice'
+      : 'whisper';
   const voice = useVoiceInput({
     token,
-    onText: (text) => setInput((v) => appendVoiceText(v, text)),
+    engine,
+    onText: (text, language) => {
+      const raw = String(language || '').slice(0, 2).toLowerCase();
+      const detected = ALL_LANGS.find((l) => l.code.slice(0, 2).toLowerCase() === raw)?.code || '';
+      const currentTarget = ALL_LANGS.find((l) => l.code === to) ?? ALL_LANGS[1];
+      let sourceCode = from;
+      let targetCode = to;
+
+      // 识别到语言后，翻译器自动把源语言和目标语言摆到正确方向。
+      if (detected && from === AUTO) sourceCode = detected;
+      const sourceForCompare = sourceCode === AUTO ? detected : sourceCode;
+      if (detected && sourceForCompare && currentTarget.code.slice(0, 2).toLowerCase() === raw) {
+        targetCode = raw === 'zh' ? 'en-US' : 'zh-CN';
+      }
+      if (sourceCode !== from) setFrom(sourceCode);
+      if (targetCode !== to) setTo(targetCode);
+
+      setInput((v) => appendVoiceText(v, text));
+      const targetLang = ALL_LANGS.find((l) => l.code === targetCode) ?? ALL_LANGS[1];
+      const detect = sourceCode === AUTO;
+      void run(appendVoiceText(input, text), {
+        sourceCode: detect ? AUTO : sourceCode,
+        targetCode: targetLang.code,
+        detect,
+      });
+    },
   });
 
   const target = ALL_LANGS.find((l) => l.code === to) ?? ALL_LANGS[1];
 
   useEffect(() => () => stopSpeaking(), []);
 
-  async function run(text = input) {
+  async function run(
+    text = input,
+    options?: { sourceCode?: string; targetCode?: string; detect?: boolean },
+  ) {
     const t = text.trim();
     if (!t || busy) return;
+
+    const sourceCode = options?.sourceCode ?? from;
+    const targetCode = options?.targetCode ?? to;
+    const targetLang = ALL_LANGS.find((l) => l.code === targetCode) ?? target;
+    const detect = options?.detect ?? sourceCode === AUTO;
 
     setBusy(true);
     setErr('');
@@ -43,7 +82,7 @@ export function Translator({ token }: { token: string }) {
     setDetected('');
 
     try {
-      const r = await translateText(t, target.name, token, undefined, target.code, from === AUTO);
+      const r = await translateText(t, targetLang.name, token, undefined, targetLang.code, detect);
       setOut(r.text);
       if (r.from) setDetected(r.from);
     } catch {
@@ -125,7 +164,16 @@ export function Translator({ token }: { token: string }) {
           onClick={voice.start}
           disabled={voice.busy || (!voice.supported && !voice.recording)}
         >
-          {voice.busy ? '识别中…' : voice.recording ? '停止' : '语音输入'}
+          {voice.busy ? (
+            '识别中…'
+          ) : voice.recording ? (
+            <>
+              <VoiceWave levels={voice.levels} />
+              <span>停止</span>
+            </>
+          ) : (
+            '语音输入'
+          )}
         </button>
       </div>
       {(voice.error || !voice.supported || voice.language) && (

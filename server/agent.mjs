@@ -174,6 +174,133 @@ function agentView(badge) {
   };
 }
 
+// ── API Key 自动识别 ────────────────────────────────────────
+// 粘贴 Key 后并发请求各家 OpenAI 兼容的 /models，哪家认这个 Key 就是哪家；
+// 对没有 /models 的服务商（如智谱）再按 Key 格式和固定模型表兜底。
+const AGENT_PROVIDERS = [
+  {
+    id: 'deepseek',
+    name: 'DeepSeek',
+    base: 'https://api.deepseek.com',
+    recommend: ['deepseek-chat', 'deepseek-reasoner', 'deepseek-flash'],
+  },
+  {
+    id: 'openai',
+    name: 'OpenAI',
+    base: 'https://api.openai.com/v1',
+    recommend: ['gpt-4o-mini', 'gpt-4.1-mini', 'gpt-4o'],
+  },
+  {
+    id: 'zhipu',
+    name: '智谱 GLM',
+    base: 'https://open.bigmodel.cn/api/paas/v4',
+    recommend: ['glm-4-flash', 'glm-4-air', 'glm-4-plus'],
+  },
+  {
+    id: 'dashscope',
+    name: '通义千问',
+    base: 'https://dashscope.aliyuncs.com/compatible-mode/v1',
+    recommend: ['qwen-plus', 'qwen-turbo', 'qwen-max'],
+  },
+  {
+    id: 'moonshot',
+    name: 'Moonshot',
+    base: 'https://api.moonshot.cn/v1',
+    recommend: ['moonshot-v1-8k', 'moonshot-v1-32k'],
+  },
+  {
+    id: 'siliconflow',
+    name: '硅基流动',
+    base: 'https://api.siliconflow.cn/v1',
+    recommend: ['Qwen/Qwen2.5-7B-Instruct', 'deepseek-ai/DeepSeek-V3'],
+  },
+  {
+    id: 'groq',
+    name: 'Groq',
+    base: 'https://api.groq.com/openai/v1',
+    recommend: ['llama-3.3-70b-versatile', 'llama-3.1-8b-instant'],
+  },
+  {
+    id: 'openrouter',
+    name: 'OpenRouter',
+    base: 'https://openrouter.ai/api/v1',
+    recommend: ['deepseek/deepseek-chat-v3-0324', 'openai/gpt-4o-mini'],
+  },
+  {
+    id: 'mistral',
+    name: 'Mistral',
+    base: 'https://api.mistral.ai/v1',
+    recommend: ['mistral-small-latest'],
+  },
+  {
+    id: 'xai',
+    name: 'xAI',
+    base: 'https://api.x.ai/v1',
+    recommend: ['grok-2-latest'],
+  },
+];
+
+const MODEL_DENY = /embed|embedding|tts|whisper|moderation|rerank|image|dall-e|stable-diffusion|sora|bge|clip|audio|transcribe|realtime|search-preview/i;
+
+function guessAgentProvider(apiKey) {
+  const key = String(apiKey || '').trim();
+  if (/^sk-or-v1-/i.test(key)) return AGENT_PROVIDERS.find((p) => p.id === 'openrouter');
+  if (/^gsk_/i.test(key)) return AGENT_PROVIDERS.find((p) => p.id === 'groq');
+  // 智谱的 Key 形如 id.secret
+  if (/^[A-Za-z0-9]{16,}\.[A-Za-z0-9]{16,}$/.test(key)) return AGENT_PROVIDERS.find((p) => p.id === 'zhipu');
+  return null;
+}
+
+function cleanModelList(provider, ids) {
+  const seen = new Set();
+  const models = [];
+  for (const raw of ids) {
+    const id = String(raw || '').trim();
+    if (!id || seen.has(id) || MODEL_DENY.test(id)) continue;
+    seen.add(id);
+    models.push(id);
+    if (models.length >= 80) break;
+  }
+  const recommended =
+    provider.recommend.find((m) => seen.has(m)) ||
+    models.find((m) => /flash|mini|turbo|chat|instruct/i.test(m)) ||
+    models[0] ||
+    provider.recommend[0] ||
+    '';
+  return { models, recommended };
+}
+
+async function probeProviderModels(provider, apiKey) {
+  const base = provider.base.replace(/\/$/, '');
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 6500);
+  try {
+    const res = await fetch(`${base}/models`, {
+      headers: { Authorization: `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
+      signal: ctrl.signal,
+    });
+    if (!res.ok) return null;
+    const data = await res.json().catch(() => null);
+    const list = Array.isArray(data?.data)
+      ? data.data
+      : Array.isArray(data?.models)
+        ? data.models
+        : [];
+    const ids = list
+      .map((m) => (typeof m === 'string' ? m : m?.id))
+      .filter(Boolean)
+      .map(String);
+    if (!ids.length) return null;
+    const { models, recommended } = cleanModelList(provider, ids);
+    if (!models.length) return null;
+    return { models, recommended };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 // ── 联系我们 ────────────────────────────────────────────────
 const FEEDBACK_FILE = path.join(ROOT, 'data', 'feedback.jsonl');
 
@@ -1645,8 +1772,9 @@ const server = http.createServer(async (req, res) => {
     return;
   }
 
-  // 语音输入：浏览器录音后直接发原始音频，由本地 faster-whisper 自动识别语言
-  if (req.url === '/api/asr' && req.method === 'POST') {
+  // 语音输入：浏览器录音后直接发原始音频，由本地 ASR 自动识别语言。
+  // engine=whisper 供翻译器处理阿拉伯语、俄语等多语种；默认走 SenseVoice。
+  if (req.url.startsWith('/api/asr') && req.method === 'POST') {
     const auth = String(req.headers.authorization || '');
     const payload = verifyToken(auth.startsWith('Bearer ') ? auth.slice(7) : '');
     if (!payload) {
@@ -1675,7 +1803,10 @@ const server = http.createServer(async (req, res) => {
     }
 
     try {
-      const upstream = await fetch('http://127.0.0.1:8790/asr', {
+      const engine = new URL(req.url, 'http://tongshi.local').searchParams.get('engine') === 'whisper'
+        ? 'whisper'
+        : '';
+      const upstream = await fetch(`http://127.0.0.1:8790/asr${engine ? `?engine=${engine}` : ''}`, {
         method: 'POST',
         headers: {
           'Content-Type': String(req.headers['content-type'] || 'application/octet-stream'),
@@ -2370,6 +2501,69 @@ const server = http.createServer(async (req, res) => {
     }
 
     res.writeHead(405).end('method not allowed');
+    return;
+  }
+
+  // 根据 API Key 自动识别服务商、API 地址和可用模型
+  if (req.url === '/api/agent/probe' && req.method === 'POST') {
+    if (tooMany(ip, 'agent-probe', 12, 60_000)) {
+      res.writeHead(429, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ message: '识别过于频繁，请稍后再试' }));
+      return;
+    }
+
+    let pb = {};
+    try {
+      pb = JSON.parse(raw);
+    } catch {
+      res.writeHead(400).end('bad json');
+      return;
+    }
+
+    const cfg = getAgentConfig(payload.badge);
+    const apiKey = String(pb.apiKey || cfg.apiKey || '').trim();
+    if (!apiKey) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ message: '请先填写 API Key' }));
+      return;
+    }
+
+    const guessed = guessAgentProvider(apiKey);
+    const ordered = guessed
+      ? [guessed, ...AGENT_PROVIDERS.filter((p) => p.id !== guessed.id)]
+      : AGENT_PROVIDERS;
+
+    // 并发探测：能认这个 Key 的 /models 就是对应的服务商
+    const results = await Promise.all(
+      ordered.map(async (provider) => ({ provider, hit: await probeProviderModels(provider, apiKey) })),
+    );
+    const found = results.find((r) => r.hit);
+
+    const view = (provider, models, recommended, verified, detection) => ({
+      ok: true,
+      verified,
+      detection,
+      provider: { id: provider.id, name: provider.name, base: provider.base },
+      models,
+      recommended,
+    });
+
+    if (found?.hit) {
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify(view(found.provider, found.hit.models, found.hit.recommended, true, 'network')));
+      return;
+    }
+
+    // 智谱等不开放 /models 的服务商：按 Key 格式给固定模型表，交给用户确认
+    if (guessed) {
+      const { models, recommended } = cleanModelList(guessed, guessed.recommend);
+      res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8' });
+      res.end(JSON.stringify(view(guessed, models, recommended, false, 'key')));
+      return;
+    }
+
+    res.writeHead(422, { 'Content-Type': 'application/json; charset=utf-8' });
+    res.end(JSON.stringify({ message: '没能自动识别这个 Key，请手动选择服务商或填写 API 地址' }));
     return;
   }
 

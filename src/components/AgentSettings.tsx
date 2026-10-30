@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   clearAgentKey,
   getAgentConfig,
+  probeAgentKey,
   resetAgentConfig,
   revealAgentKey,
   saveAgentConfig,
   testAgentConfig,
   type AgentConfigView,
+  type AgentProbeResult,
 } from '../lib/agent';
 
 const PROVIDERS = [
@@ -105,6 +107,53 @@ export function AgentSettings({
   const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [probe, setProbe] = useState<AgentProbeResult | null>(null);
+  const [probing, setProbing] = useState(false);
+  const [probeError, setProbeError] = useState('');
+  const [manualModel, setManualModel] = useState(false);
+  const probeTimer = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (probeTimer.current) window.clearTimeout(probeTimer.current);
+    };
+  }, []);
+
+  function scheduleProbe(value: string) {
+    if (probeTimer.current) window.clearTimeout(probeTimer.current);
+    setProbeError('');
+    if (value.trim().length < 12) {
+      setProbe(null);
+      setProbing(false);
+      return;
+    }
+    probeTimer.current = window.setTimeout(() => {
+      void identifyKey(value.trim());
+    }, 700);
+  }
+
+  async function identifyKey(key: string) {
+    if (!key) return;
+    setProbing(true);
+    setProbeError('');
+    try {
+      const data = await probeAgentKey(token, key);
+      setProbe(data);
+      setBase(data.provider.base);
+      setManualModel(false);
+      setModel(data.recommended || data.models[0] || '');
+      setSuccess(
+        `已识别为 ${data.provider.name}，API 地址已自动填入（${data.provider.base}）${
+          data.verified ? '' : '，未联网校验，请确认服务商'
+        }，选好模型后保存。`,
+      );
+    } catch (err) {
+      setProbe(null);
+      setProbeError(err instanceof Error ? err.message : '没能自动识别这个 API Key');
+    } finally {
+      setProbing(false);
+    }
+  }
 
   useEffect(() => {
     let alive = true;
@@ -254,10 +303,17 @@ export function AgentSettings({
   function chooseProvider(provider: (typeof PROVIDERS)[number]) {
     setBase(provider.base);
     setModel(provider.model);
-    setApiKey('');
+    setManualModel(false);
     setEditing(true);
     setError('');
-    setSuccess(`已选择 ${provider.name}，请粘贴它的 API Key 后保存。`);
+    setProbe(null);
+    setProbeError('');
+    if (apiKey.trim().length >= 12) {
+      setSuccess(`已选择 ${provider.name}，正在按你填写的 Key 重新识别…`);
+      scheduleProbe(apiKey);
+    } else {
+      setSuccess(`已选择 ${provider.name}，粘贴它的 API Key 后会自动识别服务商和模型。`);
+    }
   }
 
   const showProviders = Boolean(view && !view.active.hasOwnKey);
@@ -350,9 +406,11 @@ export function AgentSettings({
                   type="password"
                   value={apiKey}
                   onChange={(e) => {
-                    setApiKey(e.target.value);
+                    const next = e.target.value;
+                    setApiKey(next);
                     setError('');
                     setSuccess('');
+                    scheduleProbe(next);
                   }}
                   placeholder={
                     view?.active.hasKey
@@ -363,6 +421,30 @@ export function AgentSettings({
                   spellCheck={false}
                 />
               </label>
+
+              {(probing || probe || probeError) && (
+                <div className="agent-probe" aria-live="polite">
+                  {probing ? (
+                    <span className="agent-probe-status">正在识别 API Key…</span>
+                  ) : probe ? (
+                    <>
+                      <span className={`agent-probe-badge${probe.verified ? ' is-verified' : ''}`}>
+                        {probe.verified ? '已联网识别' : '按格式推断'} · {probe.provider.name}
+                      </span>
+                      <code className="agent-probe-base">{probe.provider.base}</code>
+                      <button
+                        type="button"
+                        className="agent-probe-retry"
+                        onClick={() => identifyKey(apiKey.trim())}
+                      >
+                        重新识别
+                      </button>
+                    </>
+                  ) : (
+                    <span className="agent-probe-error">{probeError}</span>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -402,17 +484,53 @@ export function AgentSettings({
 
             <label className="agent-field">
               <span>模型名称</span>
-              <input
-                value={model}
-                onChange={(e) => {
-                  setModel(e.target.value);
-                  setError('');
-                  setSuccess('');
-                }}
-                placeholder="deepseek-flash"
-                spellCheck={false}
-              />
+              {probe && probe.models.length > 0 && !manualModel ? (
+                <select
+                  value={model}
+                  onChange={(e) => {
+                    setModel(e.target.value);
+                    setError('');
+                    setSuccess('');
+                  }}
+                >
+                  {probe.models.map((m) => (
+                    <option key={m} value={m}>
+                      {m}
+                      {m === probe.recommended ? '（推荐）' : ''}
+                    </option>
+                  ))}
+                  {model && !probe.models.includes(model) && (
+                    <option value={model}>{model}（当前）</option>
+                  )}
+                </select>
+              ) : (
+                <input
+                  value={model}
+                  onChange={(e) => {
+                    setModel(e.target.value);
+                    setError('');
+                    setSuccess('');
+                  }}
+                  placeholder="deepseek-flash"
+                  spellCheck={false}
+                />
+              )}
             </label>
+            {probe && probe.models.length > 0 && (
+              <div className="agent-model-tools">
+                <span className="agent-model-count">
+                  共 {probe.models.length} 个可用模型
+                  {probe.recommended ? ` · 推荐 ${probe.recommended}` : ''}
+                </span>
+                <button
+                  type="button"
+                  className="agent-model-toggle"
+                  onClick={() => setManualModel((v) => !v)}
+                >
+                  {manualModel ? '从识别列表选择' : '手动填写模型名'}
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="agent-actions">

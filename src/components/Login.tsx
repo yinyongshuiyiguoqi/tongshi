@@ -171,7 +171,7 @@ export function Login({ onLogin, notice = '' }: { onLogin: (s: Session) => void;
               onClick={() => {
                 setForgotOpen(true);
                 setForgotStep(1);
-                setForgotPhone(account.includes('@') ? '' : account);
+                setForgotPhone(/^1[3-9]\d{9}$/.test(account) ? account : '');
                 setForgotCode('');
                 setForgotPassword('');
                 setForgotConfirm('');

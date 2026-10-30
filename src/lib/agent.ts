@@ -293,6 +293,38 @@ export async function testAgentConfig(
   return { ok: true, model: data.model || config.model, reply: data.reply || '' };
 }
 
+export interface AgentProbeResult {
+  /** 是否真的联网验证过（false 表示按 Key 格式推断，需要用户确认） */
+  verified: boolean;
+  detection: 'network' | 'key';
+  provider: { id: string; name: string; base: string };
+  models: string[];
+  recommended: string;
+}
+
+/** 根据 API Key 自动识别服务商、API 地址和可用模型 */
+export async function probeAgentKey(token: string, apiKey: string): Promise<AgentProbeResult> {
+  const res = await fetch('/api/agent/probe', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ apiKey }),
+    signal: AbortSignal.timeout(25000),
+  });
+  const data = (await res.json().catch(() => null)) as
+    | (Partial<AgentProbeResult> & { ok?: boolean; message?: string })
+    | null;
+  if (!res.ok || !data?.ok || !data.provider) {
+    throw new Error(data?.message || '没能自动识别这个 API Key');
+  }
+  return {
+    verified: Boolean(data.verified),
+    detection: data.detection === 'key' ? 'key' : 'network',
+    provider: data.provider,
+    models: Array.isArray(data.models) ? data.models.map(String) : [],
+    recommended: String(data.recommended || ''),
+  };
+}
+
 export async function submitFeedback(
   token: string,
   payload: { message: string; contact?: string },
@@ -315,9 +347,13 @@ export interface AsrResult {
   probability: number;
 }
 
-/** 上传录音，由服务端 Whisper 自动识别语言并转写 */
-export async function transcribeAudio(blob: Blob, token: string): Promise<AsrResult> {
-  const res = await fetch('/api/asr', {
+/** 上传录音，由服务端自动识别语言并转写；engine=whisper 用于多语种 */
+export async function transcribeAudio(
+  blob: Blob,
+  token: string,
+  engine: 'sensevoice' | 'whisper' = 'sensevoice',
+): Promise<AsrResult> {
+  const res = await fetch(`/api/asr${engine === 'whisper' ? '?engine=whisper' : ''}`, {
     method: 'POST',
     headers: {
       'Content-Type': blob.type || 'application/octet-stream',

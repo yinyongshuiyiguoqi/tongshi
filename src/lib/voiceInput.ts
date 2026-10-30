@@ -63,9 +63,12 @@ function speechFailure(err: unknown): string {
 export function useVoiceInput({
   token,
   onText,
+  engine = 'sensevoice',
 }: {
   token: string;
   onText: (text: string, language: string) => void;
+  /** sensevoice 对中英日韩更准；whisper 用于翻译器的多语种 */
+  engine?: 'sensevoice' | 'whisper';
 }) {
   const [supported, setSupported] = useState(() => {
     if (typeof window === 'undefined') return false;
@@ -79,12 +82,34 @@ export function useVoiceInput({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [language, setLanguage] = useState('');
+  const [levels, setLevels] = useState<number[]>(() => [0.12, 0.22, 0.16, 0.26, 0.12]);
   const recorder = useRef<MediaRecorder | null>(null);
   const stream = useRef<MediaStream | null>(null);
   const chunks = useRef<Blob[]>([]);
   const timer = useRef<number | undefined>(undefined);
+  const audioCtx = useRef<AudioContext | null>(null);
+  const analyser = useRef<AnalyserNode | null>(null);
+  const meterRaf = useRef<number | undefined>(undefined);
   const onTextRef = useRef(onText);
   onTextRef.current = onText;
+
+  const stopMeter = useCallback(() => {
+    if (meterRaf.current !== undefined) {
+      window.cancelAnimationFrame(meterRaf.current);
+      meterRaf.current = undefined;
+    }
+    try {
+      analyser.current?.disconnect();
+    } catch {
+      /* ignore */
+    }
+    analyser.current = null;
+    if (audioCtx.current) {
+      audioCtx.current.close().catch(() => {});
+      audioCtx.current = null;
+    }
+    setLevels([0.12, 0.22, 0.16, 0.26, 0.12]);
+  }, []);
 
   useEffect(() => {
     setSupported(
@@ -101,8 +126,9 @@ export function useVoiceInput({
         /* ignore */
       }
       stream.current?.getTracks().forEach((t) => t.stop());
+      stopMeter();
     };
-  }, []);
+  }, [stopMeter]);
 
   const stop = useCallback(() => {
     window.clearTimeout(timer.current);
@@ -149,10 +175,12 @@ export function useVoiceInput({
       rec.onerror = () => {
         setError('录音失败，请检查麦克风');
         setRecording(false);
+        stopMeter();
       };
       rec.onstop = async () => {
         window.clearTimeout(timer.current);
         setRecording(false);
+        stopMeter();
         media.getTracks().forEach((t) => t.stop());
         stream.current = null;
 
@@ -166,7 +194,7 @@ export function useVoiceInput({
 
         setBusy(true);
         try {
-          const result = await transcribeAudio(blob, token);
+          const result = await transcribeAudio(blob, token, engine);
           if (!result.text) {
             setError('没有听清，请靠近麦克风再说一次');
             return;
@@ -180,6 +208,43 @@ export function useVoiceInput({
         }
       };
 
+      // 实时声纹：直接分析 MediaStream，不额外录一份音频。
+      try {
+        const Ctx = window.AudioContext || (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+        if (Ctx) {
+          const ctx = new Ctx();
+          await ctx.resume().catch(() => {});
+          const source = ctx.createMediaStreamSource(media);
+          const node = ctx.createAnalyser();
+          node.fftSize = 64;
+          node.smoothingTimeConstant = 0.72;
+          source.connect(node);
+          audioCtx.current = ctx;
+          analyser.current = node;
+          const data = new Uint8Array(node.frequencyBinCount);
+          let lastPaint = 0;
+          const paint = (now: number) => {
+            if (now - lastPaint > 55) {
+              lastPaint = now;
+              node.getByteFrequencyData(data);
+              const bands: number[] = [];
+              for (let b = 0; b < 5; b++) {
+                const from = Math.floor((b * data.length) / 5);
+                const to = Math.max(from + 1, Math.floor(((b + 1) * data.length) / 5));
+                let sum = 0;
+                for (let i = from; i < to; i++) sum += data[i];
+                bands.push(Math.min(1, sum / (to - from) / 135));
+              }
+              setLevels(bands);
+            }
+            meterRaf.current = window.requestAnimationFrame(paint);
+          };
+          meterRaf.current = window.requestAnimationFrame(paint);
+        }
+      } catch {
+        // 声纹只是反馈，音频分析失败不能阻断录音。
+      }
+
       rec.start();
       setRecording(true);
       timer.current = window.setTimeout(stop, MAX_MS);
@@ -187,9 +252,10 @@ export function useVoiceInput({
       stream.current?.getTracks().forEach((t) => t.stop());
       stream.current = null;
       setRecording(false);
+      stopMeter();
       setError(speechFailure(err));
     }
-  }, [busy, recording, stop, supported, token]);
+  }, [busy, engine, recording, stop, stopMeter, supported, token]);
 
-  return { supported, recording, busy, error, language, start, stop };
+  return { supported, recording, busy, error, language, levels, start, stop };
 }
