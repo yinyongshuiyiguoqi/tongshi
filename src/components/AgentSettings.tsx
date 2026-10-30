@@ -128,6 +128,9 @@ export function AgentSettings({
       setProbing(false);
       return;
     }
+    // 旧识别结果立即让位，避免用户趁防抖窗口保存到上一个服务商
+    setProbe(null);
+    setProbing(true);
     probeTimer.current = window.setTimeout(() => {
       void identifyKey(value.trim());
     }, 700);
