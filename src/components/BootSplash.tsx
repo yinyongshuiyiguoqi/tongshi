@@ -131,14 +131,16 @@ export function BootSplash({
   }
 
   // 开机期间锁住页面滚动，避免看不到页面时把底下的登录页/工作台滚走。
+  // 交接完成后必须主动释放：BootSplash 会保留 DOM 防止卸载掉帧，不能再等 unmount。
   useEffect(() => {
+    if (done) return;
     const root = document.documentElement;
     const prevOverflow = root.style.overflow;
     root.style.overflow = 'hidden';
     return () => {
       root.style.overflow = prevOverflow;
     };
-  }, []);
+  }, [done]);
 
   // 页面真实加载完成：只标记 ready，不自动离开问候循环。
   useEffect(() => {
