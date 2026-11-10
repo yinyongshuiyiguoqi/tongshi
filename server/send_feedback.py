@@ -10,9 +10,11 @@ host = os.environ.get("FEEDBACK_SMTP_HOST", "smtp.qq.com")
 port = int(os.environ.get("FEEDBACK_SMTP_PORT", "465"))
 user = os.environ.get("FEEDBACK_SMTP_USER", "")
 password = os.environ.get("FEEDBACK_SMTP_PASS", "")
-to_addr = os.environ.get("FEEDBACK_TO", "1957074568@qq.com")
+to_addr = os.environ.get("FEEDBACK_TO", "").strip()
 if not user or not password:
     raise SystemExit("FEEDBACK_SMTP_USER / FEEDBACK_SMTP_PASS 未配置")
+if not to_addr:
+    raise SystemExit("FEEDBACK_TO 未配置")
 
 msg = MIMEText(payload.get("message", ""), "plain", "utf-8")
 msg["Subject"] = Header(f"通事反馈 - {payload.get('badge', '')}", "utf-8")

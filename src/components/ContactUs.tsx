@@ -24,7 +24,7 @@ export function ContactUs({ token }: { token: string }) {
       });
       setStatus(
         result.sent
-          ? '已发送到 1957074568@qq.com，感谢反馈。'
+          ? '已发送，感谢你的反馈。'
           : `已记录到服务器：${result.reason || '邮件通道暂不可用'}`,
       );
       setMessage('');
@@ -39,8 +39,8 @@ export function ContactUs({ token }: { token: string }) {
   return (
     <div className="contact-us">
       <p className="bg-hint">
-        使用中遇到问题、想补充法条或反馈建议，写在这里。提交后会发送到
-        1957074568@qq.com。
+        使用中遇到问题、想补充法条或反馈建议，写在这里。提交后由服务器内部转交，
+        页面不会公开个人邮箱。
       </p>
       <textarea
         className="contact-textarea"
@@ -65,9 +65,7 @@ export function ContactUs({ token }: { token: string }) {
         <button className="primary" onClick={submit} disabled={sending || !message.trim()}>
           {sending ? '发送中…' : '发送反馈'}
         </button>
-        <a className="contact-mail" href="mailto:1957074568@qq.com">
-          或直接发邮件
-        </a>
+        <span className="contact-mail">反馈会进入服务器记录，不公开邮箱</span>
       </div>
       {error && <p className="agent-error">{error}</p>}
       {status && <p className="agent-success">{status}</p>}
