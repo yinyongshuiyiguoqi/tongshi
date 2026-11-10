@@ -77,13 +77,13 @@ export default function App() {
 
   return (
     <>
-      {/* 开机动画期间整页内容只挂载、不显示：资源照常预加载，
-          但登录页/工作台不会从开机动画里透出来。
-          运镜开始时把页面挂到开机层下面，让推近和化入连成一镜。 */}
+      {/* 页面从第一帧就在不透明的开机层下面完成布局与首次绘制：
+          资源照常预加载，开机层盖住页面不会透出来；
+          运镜时页面已经预热好，不再在推近的第一帧才整页重绘。 */}
       <div
         className={`app-shell${entering ? ' is-entering' : ''}${booting ? '' : ' is-live'}`}
-        aria-hidden={booting || undefined}
-        inert={booting || undefined}
+        aria-hidden={(booting && !entering) || undefined}
+        inert={(booting && !entering) || undefined}
       >
         <Backdrop setting={backdrop} />
         <div className="aurora is-dim" aria-hidden="true">
@@ -103,7 +103,11 @@ export default function App() {
           <Login onLogin={handleLogin} notice={notice} />
         )}
       </div>
-      {booting && <BootSplash onFinish={() => setBooting(false)} onCameraStart={() => setEntering(true)} />}
+      <BootSplash
+        done={!booting}
+        onFinish={() => setBooting(false)}
+        onCameraStart={() => setEntering(true)}
+      />
     </>
   );
 }

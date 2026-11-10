@@ -56,10 +56,13 @@ function BrandMark() {
 export function BootSplash({
   onFinish,
   onCameraStart,
+  done = false,
 }: {
   onFinish: () => void;
   /** 运镜开始的一刻通知外层把页面挂到下面，让推近+淡出连成一镜。 */
   onCameraStart?: () => void;
+  /** 已交接完成：保留 DOM 但不再绘制，避免结束时拆整棵大树造成掉帧。 */
+  done?: boolean;
 }) {
   const [phase, setPhase] = useState<Phase>('greetings');
   const [greetIndex, setGreetIndex] = useState(0);
@@ -74,6 +77,8 @@ export function BootSplash({
   const wordRef = useRef<HTMLSpanElement>(null);
   const [wordBox, setWordBox] = useState({ w: 0, h: 0 });
   const timers = useRef<number[]>([]);
+  const moveRaf = useRef<number | null>(null);
+  const pointerPos = useRef<{ x: number; y: number } | null>(null);
 
   function endBoot() {
     if (finished.current) return;
@@ -222,16 +227,30 @@ export function BootSplash({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
-  useEffect(() => () => timers.current.forEach((id) => window.clearTimeout(id)), []);
+  useEffect(() => () => {
+    timers.current.forEach((id) => window.clearTimeout(id));
+    if (moveRaf.current !== null) window.cancelAnimationFrame(moveRaf.current);
+  }, []);
 
+  // 指针视差：pointermove 在桌面/触屏上可能每秒触发上百次，直接写 CSS 变量会让
+  // 14 个依赖 --boot-mx/--boot-my 的元素反复重算 transform，其中 .boot-glass 还带
+  // transition，会被不断打断重启，主线程一直忙。这里合并到每帧最多一次；
+  // 触屏没有 hover 视差的意义，直接跳过，省掉整条重算链路。
   function move(e: ReactPointerEvent<HTMLDivElement>) {
-    const el = rootRef.current;
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const mx = ((e.clientX - r.left) / r.width - 0.5) * 2;
-    const my = ((e.clientY - r.top) / r.height - 0.5) * 2;
-    el.style.setProperty('--boot-mx', mx.toFixed(3));
-    el.style.setProperty('--boot-my', my.toFixed(3));
+    if (isTouch) return;
+    pointerPos.current = { x: e.clientX, y: e.clientY };
+    if (moveRaf.current !== null) return;
+    moveRaf.current = window.requestAnimationFrame(() => {
+      moveRaf.current = null;
+      const el = rootRef.current;
+      const pos = pointerPos.current;
+      if (!el || !pos) return;
+      const r = el.getBoundingClientRect();
+      const mx = ((pos.x - r.left) / r.width - 0.5) * 2;
+      const my = ((pos.y - r.top) / r.height - 0.5) * 2;
+      el.style.setProperty('--boot-mx', mx.toFixed(3));
+      el.style.setProperty('--boot-my', my.toFixed(3));
+    });
   }
 
   // 用真实文字的排版尺寸驱动小玻璃，而不是按字符数猜大小。
@@ -264,7 +283,7 @@ export function BootSplash({
   return (
     <div
       ref={rootRef}
-      className={`boot-splash is-${phase}`}
+      className={`boot-splash is-${phase}${done ? ' is-done' : ''}`}
       role="button"
       tabIndex={0}
       aria-label={
