@@ -99,6 +99,25 @@ export function ResultCard({
     .filter(Boolean)
     .join('\n');
 
+  const fullText = [
+    `【${item.title}】`,
+    `匹配度：${Math.round(score * 100)}%`,
+    '',
+    `研判：${item.brief}`,
+    '',
+    '处置流程：',
+    ...item.steps.map((step, i) => `${i + 1}. ${step}`),
+    '',
+    '法律依据：',
+    ...provisions.map((p) => `《${p.law}》${p.article}：${p.summary}`),
+    '',
+    '现场话术：',
+    ...scripts.map((s) => s.zh),
+    '',
+    `注意：${item.risk}`,
+    `待核实：${item.followUp}`,
+  ].join('\n');
+
   const lawPreview = provisions.length
     ? `《${provisions[0].law}》${provisions[0].article ?? ''}`
     : '本次未匹配到条文';
@@ -129,9 +148,12 @@ export function ResultCard({
         </p>
 
         <div className="r-actions">
-          <button onClick={() => copy(zh, '中文话术')}>复制中文</button>
+          <button className="r-actions-primary" onClick={() => copy(fullText, '完整方案')}>
+            复制完整方案
+          </button>
+          <button onClick={() => copy(zh, '中文话术')}>复制中文话术</button>
           {en && <button onClick={() => copy(en, '英文话术')}>复制英文</button>}
-          <button className="r-actions-primary" onClick={() => window.print()}>
+          <button onClick={() => window.print()}>
             打印 / 存为 PDF
           </button>
           {toast && <span className="r-actions-toast">{toast}</span>}
@@ -241,6 +263,11 @@ export function ResultCard({
                   <summary>查看条文原文</summary>
                   <p>{p.text}</p>
                 </details>
+              )}
+              {p.source && (
+                <a className="r-source" href={p.source} target="_blank" rel="noreferrer">
+                  查看公布来源 ↗
+                </a>
               )}
             </li>
           ))}

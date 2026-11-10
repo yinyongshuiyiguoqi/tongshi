@@ -1,6 +1,6 @@
 import { useMemo, useState, type ChangeEvent } from 'react';
 import { CASES } from '../data/cases';
-import { clearRecent, loadRecent } from '../lib/history';
+import { clearRecent, loadRecent, removeRecent } from '../lib/history';
 import {
   DOCK_FROST_MAX,
   loadDockFrost,
@@ -99,10 +99,19 @@ export function CaseLibrary({ onPick }: { onPick: (text: string) => void }) {
 
 export function HistoryView({ onPick }: { onPick: (text: string) => void }) {
   const [list, setList] = useState(loadRecent);
+  const [q, setQ] = useState('');
+  const filtered = list.filter((r) =>
+    !q.trim() || `${r.title} ${r.text}`.toLowerCase().includes(q.trim().toLowerCase()),
+  );
 
   function clear() {
     clearRecent();
     setList([]);
+  }
+
+  function remove(at: number) {
+    removeRecent(at);
+    setList(loadRecent());
   }
 
   return (
@@ -110,28 +119,48 @@ export function HistoryView({ onPick }: { onPick: (text: string) => void }) {
       <header className="view-head">
         <h1>记录</h1>
         <p>存在这台设备上，换设备不会同步。</p>
+        {list.length > 0 && (
+          <input
+            className="view-search"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="搜历史记录，例如 护照、住宿、纠纷"
+          />
+        )}
       </header>
 
       {list.length === 0 ? (
         <p className="view-empty">还没有查询记录。回到「查询」，描述一次现场情况就会记下来。</p>
+      ) : filtered.length === 0 ? (
+        <p className="view-empty">没有匹配的记录。</p>
       ) : (
         <>
           <div className="case-list">
-            {list.map((r) => (
-              <button key={r.at} className="case-item record-item" onClick={() => onPick(r.text)}>
-                <div className="case-body">
-                  <p className="case-title">{r.title}</p>
-                  <p className="case-scene">{r.text}</p>
-                  <p className="record-time">
-                    {new Date(r.at).toLocaleString('zh-CN', {
-                      month: '2-digit',
-                      day: '2-digit',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </p>
-                </div>
-              </button>
+            {filtered.map((r) => (
+              <div key={r.at} className="record-row">
+                <button className="case-item record-item" onClick={() => onPick(r.text)}>
+                  <div className="case-body">
+                    <p className="case-title">{r.title}</p>
+                    <p className="case-scene">{r.text}</p>
+                    <p className="record-time">
+                      {new Date(r.at).toLocaleString('zh-CN', {
+                        month: '2-digit',
+                        day: '2-digit',
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      })}
+                    </p>
+                  </div>
+                </button>
+                <button
+                  className="record-del"
+                  onClick={() => remove(r.at)}
+                  aria-label="删除这条记录"
+                  title="删除这条记录"
+                >
+                  删除
+                </button>
+              </div>
             ))}
           </div>
           <button className="ghost-btn view-clear" onClick={clear}>

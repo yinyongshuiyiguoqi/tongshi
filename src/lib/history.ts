@@ -17,6 +17,15 @@ export function loadRecent(): RecentItem[] {
   }
 }
 
+export function removeRecent(at: number) {
+  try {
+    const list = loadRecent().filter((r) => r.at !== at);
+    localStorage.setItem(KEY, JSON.stringify(list));
+  } catch {
+    // 忽略
+  }
+}
+
 export function clearRecent() {
   try {
     localStorage.removeItem(KEY);
