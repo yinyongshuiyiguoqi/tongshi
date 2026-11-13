@@ -19,7 +19,7 @@ import {
   foreignPreview,
 } from '../lib/speech';
 import type { Session } from '../lib/session';
-import { PHOTOS, photoUrl, nextPhoto, type BackdropSetting } from './Backdrop';
+import { PHOTOS, photoThumbUrl, nextPhoto, type BackdropSetting } from './Backdrop';
 import { SwitchRow } from './SwitchRow';
 import { AgentSettings } from './AgentSettings';
 import { AccountManager } from './AccountManager';
@@ -333,7 +333,7 @@ export function Profile({
             <button
               key={p.file}
               className={`bg-swatch is-photo${backdrop.kind === 'photo' && (backdrop.photo ?? 0) === i ? ' is-on' : ''}`}
-              style={{ backgroundImage: `url(${photoUrl(i)})` }}
+              style={{ backgroundImage: `url(${photoThumbUrl(i)})` }}
               onClick={() => onBackdrop({ kind: 'photo', photo: i, auto: false })}
             >
               <span>{p.label}</span>

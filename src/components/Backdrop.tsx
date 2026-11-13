@@ -45,6 +45,12 @@ export function photoUrl(index: number): string {
   return `${import.meta.env.BASE_URL}backgrounds/${p.file}`;
 }
 
+/** 设置页的小缩略图：480px WebP，避免一次加载 9MB 原图。 */
+export function photoThumbUrl(index: number): string {
+  const p = PHOTOS[((index % PHOTOS.length) + PHOTOS.length) % PHOTOS.length];
+  return `${import.meta.env.BASE_URL}backgrounds/thumbs/${p.file.replace(/\.jpg$/i, '.webp')}`;
+}
+
 export function loadBackdrop(): BackdropSetting {
   try {
     const raw = localStorage.getItem(KEY);
